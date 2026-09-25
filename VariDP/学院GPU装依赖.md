@@ -41,6 +41,11 @@ uv sync
 `uv sync` 会自动做三件事：装一个符合 `requires-python` 的 Python → 在仓库根建 `.venv` →
 装齐所有依赖并生成 `uv.lock`（全组共用这份 lock，环境可复现）。
 
+> 仓库里的 `.python-version` 把解释器钉在 **3.12**，别往上改：mani_skill 3.0.1 在 Linux 上
+> 依赖 `mplib==0.1.1`，而 mplib 只发了 cp310–cp312 的 manylinux 轮子、没有源码包，用
+> 3.13 / 3.14 会直接报 `can't be installed because it doesn't have a source distribution or
+> wheel for the current platform`（我们不用 mplib 做规划，但它装不上整个 sync 就失败）。
+
 > 之后跑本项目的命令都加 `uv run` 前缀，比如 `uv run python train/train.py ...`。
 > 它会自动使用这个 `.venv`，不用手动 activate。
 
@@ -131,7 +136,7 @@ uv pip install --find-links wheels/ torch==2.14.0+cu126
 
 ```bash
 cd ~/VariDP
-python3 --version            # 最好 >= 3.12；太老就先用 uv python install 3.12
+python3 --version            # 必须是 3.12（mplib 只有 cp310–cp312 轮子）；不对就先 uv python install 3.12
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -171,6 +176,7 @@ pip freeze > requirements.txt
 | `ModuleNotFoundError: mani_skill` | 没在 `.venv` 里跑 | 用 `uv run python ...`（推荐），或先 `source .venv/bin/activate` |
 | `没找到 xxx 的 state 数据集` | 数据没传 / 路径不对 | 确认 `~/.maniskill/demos/<Task>-v1/**/*.state.pd_ee_delta_pos.physx_cpu.h5` 存在 |
 | 家目录配额爆了 | torch + CUDA 轮子约 7 GB | `df -h ~` 看配额；`uv cache clean` 清缓存；或按附录 A 招 1 把 `.venv` 建到大盘上 |
+| `uv sync` 报 `mplib==0.1.1 ... doesn't have a source distribution or wheel for the current platform` | uv 自动挑的解释器比 3.12 新（3.13/3.14），mplib 没有对应轮子 | 仓库里 `.python-version` 已是 3.12，确认没被改掉；然后 `uv python install 3.12` + `uv sync` |
 | 改了项目目录名后 activate / pinocchio 报错 | venv 里存了创建时的绝对路径 | 跑 `python tools/fix_venv_paths.py --apply` 一键修（脚本在仓库里，只用标准库） |
 | 训练比本机还慢 | 被分到共享节点 / CPU 核被限 | `nvidia-smi` 确认卡空闲；数据加载用 `--num-workers`（如支持） |
 
@@ -178,7 +184,7 @@ pip freeze > requirements.txt
 
 | 包 | 版本 | 备注 |
 |---|---|---|
-| Python | 3.13.14（本机）/ **3.12（农场推荐）** | sapien 3.0.3 轮子覆盖 cp310–cp314；想和本机完全一致就 `uv python install 3.13` + `requires-python = ">=3.13"` |
+| Python | **3.12（本机 / 农场都用这个）** | 不能更高：mani_skill 3.0.1 在 Linux 依赖的 `mplib==0.1.1` 只有 cp310–cp312 轮子（sapien 3.0.3 本身覆盖 cp310–cp314，mplib 才是瓶颈）。`uv python install 3.12`，仓库里的 `.python-version` 已钉好 |
 | torch | 2.14.0+cu126 | cu126 在 4080 上跑满，驱动 580 兼容 |
 | numpy | 2.5.3 | |
 | h5py | 3.16.0 | |

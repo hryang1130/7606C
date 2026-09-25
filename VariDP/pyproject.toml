@@ -11,11 +11,15 @@
 #   3) 若某平台没有 `torch==2.14.0+cu126` 的轮子，把版本号去掉只留 `"torch"`，
 #      uv 会选该平台最新 cu126 版；**以 uv.lock 为准，报告里写清楚实际版本**。
 #   4) 本项目训练/评测不需要 diffusers / wandb / tensorboard / Vulkan / CUDA Toolkit / mplib。
+#   5) Python 必须钉在 3.12（见 .python-version）：mani_skill 3.0.1 在 Linux 上依赖
+#      mplib==0.1.1，而 mplib 只发了 cp310–cp312 的 manylinux x86_64 轮子、没有 sdist，
+#      用 3.13 / 3.14 会直接报 "doesn't have a source distribution or wheel for the
+#      current platform"。虽然我们不用 mplib 做规划，但它没法装就整个 sync 失败。
 [project]
 name = "dasc7606c-track3"
 version = "0.1.0"
 description = "Diffusion Policy (state-based) on ManiSkill 3 — DASC7606C Track 3"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch==2.14.0+cu126",
     "numpy==2.5.3",

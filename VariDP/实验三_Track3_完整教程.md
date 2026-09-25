@@ -415,7 +415,8 @@ python train_local/eval.py  --ckpt train_local/runs/<刚训好的实验目录>/b
 3. 版本锁（本地实测组合）：
 
 ```text
-python        3.13.12（集群若是 3.9~3.12 也可以，mani_skill 3.0.1 都支持）
+python        3.12（用 uv sync 装 Linux 环境时必须是 3.12：mani_skill 3.0.1 在 Linux 依赖的
+              mplib 只发了 cp310–cp312 的轮子，3.13/3.14 装不上）
 torch         2.14.0+cu126
 torchvision   0.29.0+cu126
 torchaudio    2.11.0+cu126
