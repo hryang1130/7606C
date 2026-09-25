@@ -1,0 +1,43 @@
+# DASC7606C Track 3 —— Diffusion Policy (state-based) on ManiSkill 3
+#
+# 本机 Windows（RTX 4060 Ti）与学院 GPU（Linux, RTX 4080）共用这一份依赖声明：
+#   uv sync                      # 自动建 .venv 并装齐（推荐，生成 uv.lock 供报告声明"可复现"）
+#   uv pip install -e .          # 用现成 venv 时，把本项目装成可编辑包（可选）
+#
+# 说明：
+#   1) 不装成包也能跑：train_local/ 与 train/ 下的脚本会自动把仓库根目录挂到 sys.path，
+#      直接 `python train_local/train.py` 即可；装成包只是让 `python -c "import dp"` 之类更顺手。
+#   2) torch 固定从 PyTorch 官方 cu126 源取（见文末 index / sources），避免 uv 从 PyPI 拿默认版。
+#   3) 若某平台没有 `torch==2.14.0+cu126` 的轮子，把版本号去掉只留 `"torch"`，
+#      uv 会选该平台最新 cu126 版；**以 uv.lock 为准，报告里写清楚实际版本**。
+#   4) 本项目训练/评测不需要 diffusers / wandb / tensorboard / Vulkan / CUDA Toolkit / mplib。
+[project]
+name = "dasc7606c-track3"
+version = "0.1.0"
+description = "Diffusion Policy (state-based) on ManiSkill 3 — DASC7606C Track 3"
+requires-python = ">=3.12"
+dependencies = [
+    "torch==2.14.0+cu126",
+    "numpy==2.5.3",
+    "h5py==3.16.0",
+    "gymnasium==1.3.0",
+    "sapien==3.0.3",
+    "mani_skill==3.0.1",
+    "matplotlib",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# 只把可复用库装成包；train_local/ tools/ train/ 是入口脚本，不需要安装
+packages = ["dp"]

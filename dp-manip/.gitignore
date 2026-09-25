@@ -1,0 +1,14 @@
+.venv/
+.python/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+data/
+demos-*/
+results/
+checkpoints/
+logs/
+.venv-uv-guard/
+.idea/
