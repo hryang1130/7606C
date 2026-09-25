@@ -1,0 +1,29 @@
+[project]
+name = "train-template"
+version = "0.1.0"
+description = "Reusable ManiSkill Diffusion Policy experiment template"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "diffusers>=0.30,<1",
+    "gymnasium>=0.29.1,<1",
+    "h5py>=3.10",
+    "imageio[ffmpeg]>=2.34",
+    "mani_skill==3.0.1",
+    "matplotlib>=3.8",
+    "numpy>=1.26,<2",
+    "tensorboard>=2.17",
+    "torch>=2.13,<2.14",
+    "tqdm>=4.66",
+    "tyro>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
