@@ -1,17 +1,15 @@
 [project]
 name = "dp-manip"
 version = "0.1.0"
-description = "ManiSkill expert-data inspection and Diffusion Policy training workspace"
+description = "Cluster-first RGB Diffusion Policy training for ManiSkill demonstrations"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "h5py==3.16.0",
     "numpy==1.26.4",
     "torch==2.14.0",
-    # DP training (dp_manip/policy.py, scripts/train_dp.py)
+    # DDPM scheduler used by the RGB policy.
     "diffusers==0.40.0",
-    # Evaluation env; pinned to the versions that generated the demos on ubuntu
-    # (environment/ubuntu-expert-freeze.txt). mani-skill pulls mplib==0.1.1 on
-    # Linux, which is installed but never used for planning on wsl.
+    # Closed-loop RGB evaluation; training itself does not import ManiSkill.
     "mani-skill==3.0.1",
     "sapien==3.0.3",
     "gymnasium==1.3.0",

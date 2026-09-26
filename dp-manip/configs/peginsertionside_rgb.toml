@@ -1,0 +1,54 @@
+[task]
+name = "peginsertionside"
+env_id = "PegInsertionSide-v1"
+control_mode = "pd_joint_pos"
+max_episode_steps = 300
+sim_backend = "physx_cpu"
+shader_pack = "minimal"
+
+[data]
+root = "data/dataset"
+train_path = "train/PegInsertionSide-v1/motionplanning/trajectory.state.pd_joint_pos.physx_cpu.h5"
+val_path = "val/PegInsertionSide-v1/motionplanning/trajectory.state.pd_joint_pos.physx_cpu.h5"
+num_demos = 100
+val_num_demos = 50
+
+[vision]
+feature_dim = 128
+random_shift = 4
+share_camera_encoder = true
+
+[policy]
+obs_horizon = 2
+act_horizon = 8
+pred_horizon = 16
+diffusion_step_embed_dim = 256
+unet_dims = [256, 512, 1024]
+kernel_size = 5
+n_groups = 8
+num_diffusion_iters = 100
+num_inference_iters = 100
+
+[train]
+seed = 1
+total_iters = 100000
+batch_size = 64
+num_workers = 8
+lr = 1e-4
+weight_decay = 1e-6
+warmup_steps = 500
+grad_clip = 1.0
+ema_decay = 0.9999
+log_freq = 100
+resume_freq = 5000
+validation_steps = [10000, 30000, 60000]
+checkpoint_steps = [10000, 30000, 60000]
+amp = true
+
+[eval]
+val_seed_start = 5000
+val_episodes = 50
+test_seed_start = 10000
+test_episodes = 100
+num_envs = 4
+inference_seed = 0

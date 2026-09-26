@@ -1,1 +1,1 @@
-"""State-based Diffusion Policy for ManiSkill tasks (see dp_manip/README.md for provenance)."""
+"""RGB Diffusion Policy for the six ManiSkill manipulation tasks."""

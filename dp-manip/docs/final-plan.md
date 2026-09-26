@@ -1,5 +1,9 @@
 # 最终实验参数（六任务基线 + 两条研究轨道）
 
+> **历史文档（state-based，2026-09-24）**：当前实现已经按新要求改为 RGB-based，任务和
+> 控制模式以 `../configs/*_rgb.toml` 为准。数据量研究的嵌套 N 档、训练种子数、100k 固定
+> 步数与 held-out seed 段继续沿用；当前可执行计划见 `../PLAN.md`。
+
 **起草**：9.24 ｜ 课程要求：[requirements.md](./requirements.md) ｜ 参考：组员 VariDP 教程（[实验三_Track3_完整教程.md](https://github.com/hryang1130/VariDP/blob/main/%E5%AE%9E%E9%AA%8C%E4%B8%89_Track3_%E5%AE%8C%E6%95%B4%E6%95%99%E7%A8%8B.md)）
 
 **更新**：9.25 按 VariDP 最新主干（官方 UNet 66.4M ／ 官方 DP-T 8.97M ／ MLP 0.353M）修订 §6、§8、§9.2。

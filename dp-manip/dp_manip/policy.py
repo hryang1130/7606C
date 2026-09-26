@@ -1,13 +1,4 @@
-"""Diffusion Policy agent (state observations, 1D conditional UNet, DDPM).
-
-Adapted from ManiSkill examples/baselines/diffusion_policy/train.py
-(haosulab/ManiSkill@62ff3a5, Apache-2.0). Changes from the baseline:
-- dimensions come from the dataset instead of an env object, so the agent can
-  be built and checked without ManiSkill installed;
-- the model works in normalized action space, and `ActionNormalizer` maps
-  sampled actions back to the env's units in `get_action`;
-- checkpoints carry the resolved config and normalizer statistics.
-"""
+"""RGB-conditioned Diffusion Policy with a ResNet-18 observation encoder."""
 
 from __future__ import annotations
 
@@ -17,87 +8,145 @@ import torch.nn.functional as F
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 from .conditional_unet1d import ConditionalUnet1D
-from .config import PolicyConfig
-from .data import ActionNormalizer
+from .config import PolicyConfig, VisionConfig
+from .data import NormalizationStats
+from .vision import ResNet18Encoder, random_shift
 
 
 class DiffusionPolicy(nn.Module):
-    def __init__(self, cfg: PolicyConfig, obs_dim: int, act_dim: int, normalizer: ActionNormalizer):
-        super().__init__()
-        self.obs_horizon = cfg.obs_horizon
-        self.act_horizon = cfg.act_horizon
-        self.pred_horizon = cfg.pred_horizon
-        self.obs_dim = obs_dim
-        self.act_dim = act_dim
-        self.normalizer = normalizer
+    """Encode RGB + proprioception and denoise a normalized action sequence."""
 
+    def __init__(
+        self,
+        policy_cfg: PolicyConfig,
+        vision_cfg: VisionConfig,
+        *,
+        image_shape: tuple[int, int, int],
+        proprio_dim: int,
+        action_dim: int,
+        stats: NormalizationStats,
+    ):
+        super().__init__()
+        height, width, channels = image_shape
+        if height < 32 or width < 32 or channels % 3:
+            raise ValueError(f"invalid concatenated camera image shape: {image_shape}")
+        self.obs_horizon = policy_cfg.obs_horizon
+        self.act_horizon = policy_cfg.act_horizon
+        self.pred_horizon = policy_cfg.pred_horizon
+        self.action_dim = action_dim
+        self.num_cameras = channels // 3
+        self.num_inference_iters = policy_cfg.num_inference_iters
+        self.random_shift_pad = vision_cfg.random_shift
+        self.share_camera_encoder = vision_cfg.share_camera_encoder
+
+        if self.share_camera_encoder:
+            self.image_encoders = nn.ModuleList([ResNet18Encoder(vision_cfg.feature_dim)])
+        else:
+            self.image_encoders = nn.ModuleList(
+                ResNet18Encoder(vision_cfg.feature_dim) for _ in range(self.num_cameras)
+            )
+        observation_dim = self.num_cameras * vision_cfg.feature_dim + proprio_dim
         self.noise_pred_net = ConditionalUnet1D(
-            input_dim=act_dim,
-            global_cond_dim=cfg.obs_horizon * obs_dim,
-            diffusion_step_embed_dim=cfg.diffusion_step_embed_dim,
-            down_dims=cfg.unet_dims,
-            n_groups=cfg.n_groups,
+            input_dim=action_dim,
+            global_cond_dim=policy_cfg.obs_horizon * observation_dim,
+            diffusion_step_embed_dim=policy_cfg.diffusion_step_embed_dim,
+            down_dims=policy_cfg.unet_dims,
+            kernel_size=policy_cfg.kernel_size,
+            n_groups=policy_cfg.n_groups,
         )
         self.noise_scheduler = DDPMScheduler(
-            num_train_timesteps=cfg.num_diffusion_iters,
-            beta_schedule="squaredcos_cap_v2",  # baseline: large effect on performance
-            clip_sample=True,  # samples are clipped to [-1, 1] -> actions must be normalized
+            num_train_timesteps=policy_cfg.num_diffusion_iters,
+            beta_schedule="squaredcos_cap_v2",
+            clip_sample=True,
             prediction_type="epsilon",
         )
+        self.register_buffer("state_mean", torch.as_tensor(stats.state_mean))
+        self.register_buffer("state_std", torch.as_tensor(stats.state_std))
+        self.register_buffer("action_low", torch.as_tensor(stats.action_low))
+        self.register_buffer("action_high", torch.as_tensor(stats.action_high))
 
-    def compute_loss(self, obs_seq: torch.Tensor, action_seq: torch.Tensor) -> torch.Tensor:
-        """obs_seq (B, obs_horizon, obs_dim) raw; action_seq (B, pred_horizon, act_dim) normalized."""
-        B = obs_seq.shape[0]
-        obs_cond = obs_seq.flatten(start_dim=1)
-        noise = torch.randn((B, self.pred_horizon, self.act_dim), device=obs_seq.device)
+    def normalize_state(self, state: torch.Tensor) -> torch.Tensor:
+        return ((state - self.state_mean) / self.state_std).clamp(-10.0, 10.0)
+
+    def normalize_action(self, action: torch.Tensor) -> torch.Tensor:
+        return 2.0 * (action - self.action_low) / (self.action_high - self.action_low) - 1.0
+
+    def unnormalize_action(self, action: torch.Tensor) -> torch.Tensor:
+        return (action + 1.0) * 0.5 * (self.action_high - self.action_low) + self.action_low
+
+    def encode_observation(self, rgb: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        """Return flattened conditioning from ``(B,To,3C,H,W)`` and ``(B,To,P)``."""
+        if rgb.ndim != 5 or state.ndim != 3:
+            raise ValueError(f"expected RGB/state histories, got {tuple(rgb.shape)} and {tuple(state.shape)}")
+        batch, horizon, channels, height, width = rgb.shape
+        if horizon != self.obs_horizon or channels != self.num_cameras * 3:
+            raise ValueError(f"unexpected RGB history shape {tuple(rgb.shape)}")
+        images = rgb.to(dtype=torch.float32).div_(127.5).sub_(1.0)
+        images = images.reshape(batch * horizon, self.num_cameras, 3, height, width)
+        images = images.reshape(batch * horizon * self.num_cameras, 3, height, width)
+        if self.training and self.random_shift_pad:
+            images = random_shift(images, self.random_shift_pad)
+        if self.share_camera_encoder:
+            features = self.image_encoders[0](images)
+        else:
+            by_camera = images.reshape(batch * horizon, self.num_cameras, 3, height, width)
+            encoded = [encoder(by_camera[:, index]) for index, encoder in enumerate(self.image_encoders)]
+            features = torch.stack(encoded, dim=1).reshape(batch * horizon * self.num_cameras, -1)
+        features = features.reshape(batch, horizon, -1)
+        state = self.normalize_state(state.to(dtype=torch.float32))
+        return torch.cat((features, state), dim=-1).flatten(start_dim=1)
+
+    def compute_loss(
+        self,
+        rgb: torch.Tensor,
+        state: torch.Tensor,
+        actions: torch.Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> torch.Tensor:
+        condition = self.encode_observation(rgb, state)
+        actions = self.normalize_action(actions.to(dtype=torch.float32))
+        noise = torch.randn(actions.shape, dtype=actions.dtype, device=actions.device, generator=generator)
         timesteps = torch.randint(
-            0, self.noise_scheduler.config.num_train_timesteps, (B,), device=obs_seq.device
-        ).long()
-        noisy = self.noise_scheduler.add_noise(action_seq, noise, timesteps)
-        noise_pred = self.noise_pred_net(noisy, timesteps, global_cond=obs_cond)
-        return F.mse_loss(noise_pred, noise)
+            0,
+            self.noise_scheduler.config.num_train_timesteps,
+            (actions.shape[0],),
+            device=actions.device,
+            generator=generator,
+        )
+        noisy_actions = self.noise_scheduler.add_noise(actions, noise, timesteps)
+        prediction = self.noise_pred_net(noisy_actions, timesteps, global_cond=condition)
+        return F.mse_loss(prediction, noise)
 
     @torch.no_grad()
-    def get_action(self, obs_seq: torch.Tensor) -> torch.Tensor:
-        """obs_seq (B, obs_horizon, obs_dim) -> (B, act_horizon, act_dim) in env units."""
-        B = obs_seq.shape[0]
-        obs_cond = obs_seq.flatten(start_dim=1)
-        sample = torch.randn((B, self.pred_horizon, self.act_dim), device=obs_seq.device)
-        # Inference uses all training diffusion steps, so set_timesteps is not needed.
-        for k in self.noise_scheduler.timesteps:
-            noise_pred = self.noise_pred_net(sample=sample, timestep=k, global_cond=obs_cond)
-            sample = self.noise_scheduler.step(model_output=noise_pred, timestep=k, sample=sample).prev_sample
+    def get_action(
+        self,
+        rgb: torch.Tensor,
+        state: torch.Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> torch.Tensor:
+        """Return ``(B, act_horizon, action_dim)`` in the environment's units."""
+        condition = self.encode_observation(rgb, state)
+        sample = torch.randn(
+            (rgb.shape[0], self.pred_horizon, self.action_dim),
+            device=rgb.device,
+            generator=generator,
+        )
+        self.noise_scheduler.set_timesteps(self.num_inference_iters, device=rgb.device)
+        # Unlike add_noise(), DDPMScheduler.step() does not move these tensors
+        # to the sample device. A freshly loaded evaluation-only policy has not
+        # called add_noise(), so move them explicitly before CUDA sampling.
+        self.noise_scheduler.alphas_cumprod = self.noise_scheduler.alphas_cumprod.to(rgb.device)
+        self.noise_scheduler.one = self.noise_scheduler.one.to(rgb.device)
+        for timestep in self.noise_scheduler.timesteps:
+            prediction = self.noise_pred_net(sample, timestep, global_cond=condition)
+            sample = self.noise_scheduler.step(
+                prediction, timestep, sample, generator=generator
+            ).prev_sample
         start = self.obs_horizon - 1
-        chunk = sample[:, start : start + self.act_horizon]
-        return self.normalizer.unnormalize(chunk)
+        return self.unnormalize_action(sample[:, start : start + self.act_horizon])
 
 
 def num_params(module: nn.Module) -> int:
-    return sum(p.numel() for p in module.parameters())
-
-
-def save_checkpoint(path, *, policy: DiffusionPolicy, ema_policy: DiffusionPolicy,
-                    config: dict, iteration: int, extra: dict | None = None) -> None:
-    torch.save({
-        "policy": policy.state_dict(),
-        "ema_policy": ema_policy.state_dict(),
-        "normalizer": policy.normalizer.state_dict(),
-        "obs_dim": policy.obs_dim,
-        "act_dim": policy.act_dim,
-        "config": config,
-        "iteration": iteration,
-        "extra": extra or {},
-    }, path)
-
-
-def load_checkpoint(path, device: torch.device, use_ema: bool = True):
-    """Return (policy, config dict, checkpoint dict). EMA weights by default, as the baseline evaluates."""
-    from .config import from_dict
-
-    ckpt = torch.load(path, map_location=device, weights_only=False)
-    cfg = from_dict(ckpt["config"])
-    normalizer = ActionNormalizer.from_state_dict(ckpt["normalizer"])
-    policy = DiffusionPolicy(cfg.policy, ckpt["obs_dim"], ckpt["act_dim"], normalizer).to(device)
-    policy.load_state_dict(ckpt["ema_policy" if use_ema else "policy"])
-    policy.eval()
-    return policy, cfg, ckpt
+    return sum(parameter.numel() for parameter in module.parameters())

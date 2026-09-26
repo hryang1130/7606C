@@ -10,5 +10,7 @@ demos-*/
 results/
 checkpoints/
 logs/
+runs/
+slurm-*.out
 .venv-uv-guard/
 .idea/
