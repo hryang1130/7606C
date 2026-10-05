@@ -206,6 +206,33 @@ runs/<task>_rgb_<backbone>_n<N>_s<seed>/   # backbone 目前为 unet / transform
 `control_hash` 和实际训练时长。`train_data`/`val_data`（包括 checkpoint 里的副本）也带回
 fingerprint，所以一个 checkpoint 能追溯到具体的数据文件。
 
+## 汇报视频（1080p 成功 / 失败 rollout）
+
+`scripts/record_rollout_videos.py` 按 `eval_dp.py` 的方式（同样的种子顺序、`num_envs` 和推理种子）
+重跑一个 checkpoint，从 ManiSkill 的展示相机 `render_camera` 录 1920×1080 的 H.264 MP4（`-crf 16`，
+yuv420p，PowerPoint 可直接播放），保留前 `--success` 个成功和前 `--failure` 个失败回合（默认各 3 个），
+凑够后提前停止。成败按 `success_once` 判定。策略仍然只看 128×128 的传感器相机；展示相机只多加
+`render_mode` 和 `human_render_camera_configs`，不改物理和观测。
+
+脚本默认读取同一 run 的已保存评估 `eval/<split>_<checkpoint>[_h<N>].json`，复用它的 `num_envs` 和
+回合步数，并逐回合核对 `success_once`，所以视频就是成功率背后的那些回合；不一致会写进
+`videos.json` 并以非零状态退出。有多个评估文件（例如 PlaceSphere 的 50 步和 200 步）时脚本会停下，
+需要用 `--reference` 指定。
+
+```bash
+# 单个 checkpoint（GPU 节点上）
+.venv/bin/python scripts/record_rollout_videos.py "$RUN_ROOT/pickcube_rgb_unet_n100_s1/checkpoints/final.pt"
+# PlaceSphere：指定 200 步的评估
+.venv/bin/python scripts/record_rollout_videos.py "$RUN_ROOT/placesphere_rgb_unet_n100_s1/checkpoints/final.pt" \
+  --reference "$RUN_ROOT/placesphere_rgb_unet_n100_s1/eval/test_final_h200.json"
+# 集群：一个单 GPU 作业依次录多个 checkpoint，遇到第一个失败就停
+sbatch --export=ALL,CHECKPOINTS="<final.pt> <final.pt>" slurm/record_videos.sbatch
+```
+
+输出在 `<run>/videos/<split>_<checkpoint>[_h<N>]/`：`<task>_<split>_seed<seed>_<success|failure>.mp4`
+和记录参数、逐回合结果的 `videos.json`。`--shader rt-fast` 换光线追踪（更慢），`--hold-seconds`
+控制结尾定格时长（默认 1 秒），`--fps` 默认等于任务控制频率（实时速度）。
+
 ## 代码导航
 
 - `dp_manip/data.py`：demogen schema 校验、流式统计、temporal windows；默认启动前把所选 episode
@@ -222,6 +249,7 @@ fingerprint，所以一个 checkpoint 能追溯到具体的数据文件。
 - `scripts/check_experiment.py`：Gate B checker：对比实验矩阵的 resolved config（`--run-root` 时对比实际 `run.json`），输出 `control_hash`。
 - `scripts/train_dp.py`：单运行训练 CLI，与统一入口共用 `dp_manip.trainer`。
 - `scripts/eval_dp.py`：固定种子 RGB 闭环评估。
+- `scripts/record_rollout_videos.py` / `dp_manip/rollout_video.py` / `slurm/record_videos.sbatch`：1080p 成功/失败 rollout 视频，逐回合核对已保存的评估。
 - `scripts/sweep.py`：show/plan/index 的薄 CLI；`slurm/train_array.sbatch` 与
   `slurm/eval_array.sbatch` 是旧 Job Array 入口，仅保留兼容与本地调试，当前 QOS 下不可生产使用。
 - `dp_manip/completion.py`：`final.pt`/`run.json` 完成状态判断（trainer 与调度器共用）。
