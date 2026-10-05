@@ -2,8 +2,11 @@
 """Record 1080p success and failure rollout videos of one RGB checkpoint.
 
 Rolls the checkpoint out on its held-out seeds exactly like ``eval_dp.py``
-(same seed order, ``num_envs`` and inference seed) and keeps the first
-``--success`` successful and ``--failure`` failed episodes as MP4 files::
+(same environments, seed order, ``num_envs`` and inference seed), saving each
+step's simulation state, and keeps the first ``--success`` successful and
+``--failure`` failed episodes. Each kept episode is then replayed, in its own
+freshly spawned process, through a new environment's render camera into an MP4
+file, so rendering never touches the environments the policy acts in::
 
     record_rollout_videos.py <run>/checkpoints/final.pt --split test \
         --reference <run>/eval/test_final.json
@@ -27,8 +30,10 @@ import argparse
 import datetime as dt
 import json
 import math
+import multiprocessing
 import shutil
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,7 +130,8 @@ def main() -> None:
 
     from dp_manip.evaluate import evaluate
     from dp_manip.policy import DiffusionPolicy
-    from dp_manip.rollout_video import FfmpegWriter, VideoRecorder, make_video_envs, reference_mismatches
+    from dp_manip.envs import make_eval_envs
+    from dp_manip.rollout_video import StateRecorder, reference_mismatches, render_videos, video_name
 
     if args.no_reference:
         reference_path = None
@@ -171,27 +177,39 @@ def main() -> None:
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    envs = make_video_envs(cfg, num_envs, args.width, args.height, args.shader, args.render_backend)
+    envs = make_eval_envs(cfg, num_envs, args.render_backend)
     try:
-        fps = args.fps or float(envs.get_attr("control_freq")[0])
-        recorder = VideoRecorder(
-            envs,
-            output_dir,
-            task=cfg.task.name,
-            split=args.split,
-            quota={"success": args.success, "failure": args.failure},
-            frame_shape=(args.height, args.width, 3),
-            hold_frames=round(args.hold_seconds * fps),
-            writer_factory=lambda path: FfmpegWriter(path, args.width, args.height, fps, args.crf),
-        )
-        try:
-            result = evaluate(
-                policy, envs, seeds, device, inference_seed=cfg.eval.inference_seed, observer=recorder
-            )
-        finally:
-            recorder.cleanup()
+        recorder = StateRecorder(envs, quota={"success": args.success, "failure": args.failure})
+        result = evaluate(policy, envs, seeds, device, inference_seed=cfg.eval.inference_seed, observer=recorder)
     finally:
         envs.close()
+
+    jobs = []
+    for episode in recorder.episodes:
+        episode["video"] = None
+        if episode["kept"]:
+            episode["video"] = video_name(cfg.task.name, args.split, episode["seed"], episode["outcome"])
+            jobs.append((episode["seed"], recorder.kept_states[episode["seed"]], episode["video"]))
+    # One fresh interpreter per video, so no render process builds a third scene
+    # (see dp_manip.rollout_video).
+    fps = args.fps
+    context = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=1, mp_context=context, max_tasks_per_child=1) as pool:
+        for job in jobs:
+            rendered = pool.submit(
+                render_videos,
+                cfg,
+                [job],
+                str(output_dir),
+                width=args.width,
+                height=args.height,
+                shader=args.shader,
+                fps=args.fps,
+                crf=args.crf,
+                hold_seconds=args.hold_seconds,
+                render_backend=args.render_backend,
+            ).result()
+            fps = rendered["fps"]
 
     mismatches = None if reference is None else reference_mismatches(recorder.episodes, reference["episodes"])
     manifest = {
@@ -209,7 +227,7 @@ def main() -> None:
         "quota": {"success": args.success, "failure": args.failure},
         "kept": recorder.kept,
         "video": {
-            "camera": "render_camera",
+            "camera": "render_camera (replayed from saved simulation states)",
             "width": args.width,
             "height": args.height,
             "fps": fps,

@@ -1,13 +1,13 @@
-"""Rollout videos: labels, quotas, reproducibility and the render camera.
+"""Rollout videos: labels, quotas, state replay and the render camera.
 
-ManiSkill and ffmpeg are cluster-only, so a fake vector environment renders
-frames that encode (seed, timestep) and a fake writer keeps them in memory.
+ManiSkill and ffmpeg are cluster-only, so a fake vector environment returns
+states that encode (seed, timestep), a fake render environment draws them into
+frames, and a fake writer keeps the frames in memory.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 import tempfile
 import unittest
@@ -26,7 +26,12 @@ else:
 
 from dp_manip import config as config_lib
 from dp_manip.envs import environment_kwargs
-from dp_manip.rollout_video import VideoRecorder, reference_mismatches, video_environment_kwargs, video_name
+from dp_manip.rollout_video import (
+    StateRecorder,
+    reference_mismatches,
+    render_episode,
+    video_environment_kwargs,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "configs" / "tasks"
@@ -51,7 +56,6 @@ def succeeds(seed: int) -> bool:
 class FakeVectorEnv:
     def __init__(self, num_envs: int):
         self.num_envs = num_envs
-        self.render_calls = 0
 
     def _observation(self) -> dict:
         rgb = np.zeros((self.num_envs, 4, 4, 3), dtype=np.uint8)
@@ -71,48 +75,62 @@ class FakeVectorEnv:
         return self._observation(), reward, np.zeros(self.num_envs, bool), truncated, {"success": success}
 
     def call(self, name):
-        assert name == "render"
-        self.render_calls += 1
-        frames = []
-        for seed in self.seeds:
-            frame = np.zeros(FRAME, dtype=np.uint8)
-            frame[..., 0] = seed % 256
-            frame[..., 1] = self.t
-            frames.append(frame)
-        return tuple(frames)
+        assert name == "get_state_dict"
+        return tuple(
+            {"actors": {"cube": np.array([[seed, self.t]])}, "controller": {"arm": np.zeros(1)}}
+            for seed in self.seeds
+        )
+
+
+class FakeRenderEnv:
+    """Draws the (seed, timestep) of the state it was last given."""
+
+    def __init__(self, shape=FRAME):
+        self.shape = shape
+        self.resets: list[int] = []
+        self.unwrapped = self
+
+    def reset(self, seed):
+        self.resets.append(seed)
+        self.state = None
+
+    def set_state_dict(self, state):
+        assert "controller" not in state
+        self.state = state
+
+    def render(self):
+        seed, t = self.state["actors"]["cube"][0]
+        frame = np.zeros((1, *self.shape), dtype=np.uint8)
+        frame[..., 0] = seed % 256
+        frame[..., 1] = t
+        return frame
 
 
 class MemoryWriter:
-    """Writes (seed, timestep) of every frame to the file on close."""
-
-    def __init__(self, path: Path):
-        self.path = path
+    def __init__(self):
         self.frames: list[tuple[int, int]] = []
-        path.write_bytes(b"")
+        self.closed = False
 
     def write(self, frame):
         self.frames.append((int(frame[0, 0, 0]), int(frame[0, 0, 1])))
 
     def close(self):
-        self.path.write_text(json.dumps(self.frames), encoding="utf-8")
+        self.closed = True
 
 
-def frames_of(path: Path) -> list[tuple[int, int]]:
-    return [tuple(item) for item in json.loads(path.read_text(encoding="utf-8"))]
-
-
-def run_waves(recorder: VideoRecorder, envs: FakeVectorEnv, seeds: list[int]) -> int:
+def run_waves(recorder: StateRecorder, envs: FakeVectorEnv, seeds: list[int]) -> int:
     """Drive the observer the way ``evaluate`` does; return the number of waves run."""
     waves = 0
+    empty = np.zeros(0)
     for offset in range(0, len(seeds), envs.num_envs):
         chunk = seeds[offset : offset + envs.num_envs]
         envs.reset(chunk)
-        recorder.on_reset(chunk, None, None)
+        recorder.on_reset(chunk, empty, empty)
         success_once = np.zeros(len(chunk), dtype=bool)
         for _ in range(MAX_STEPS):
             _, _, _, _, info = envs.step(None)
             success_once |= info["success"]
-            recorder.on_step(None, None, None, None, info["success"])
+            recorder.on_step(None, empty, empty, None, info["success"])
         waves += 1
         episodes = [{"seed": seed, "success_once": bool(ok)} for seed, ok in zip(chunk, success_once)]
         if recorder.on_wave_end(episodes):
@@ -120,87 +138,60 @@ def run_waves(recorder: VideoRecorder, envs: FakeVectorEnv, seeds: list[int]) ->
     return waves
 
 
-def make_recorder(envs, output_dir: Path, success: int, failure: int, hold_frames: int = 0) -> VideoRecorder:
-    return VideoRecorder(
-        envs,
-        output_dir,
-        task="placesphere",
-        split="test",
-        quota={"success": success, "failure": failure},
-        frame_shape=FRAME,
-        hold_frames=hold_frames,
-        writer_factory=MemoryWriter,
-    )
-
-
-class VideoRecorderTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.output = Path(self.tmp.name) / "videos"
-        self.output.mkdir()
-
-    def tearDown(self) -> None:
-        self.tmp.cleanup()
-
+class StateRecorderTest(unittest.TestCase):
     def test_keeps_first_episodes_of_each_outcome_and_labels_them_by_success_once(self) -> None:
         envs = FakeVectorEnv(num_envs=2)
-        recorder = make_recorder(envs, self.output, success=2, failure=1)
+        recorder = StateRecorder(envs, quota={"success": 2, "failure": 1})
         run_waves(recorder, envs, list(range(10000, 10010)))
-        kept = sorted(path.name for path in self.output.glob("*.mp4"))
         # 10002 and 10005 are the first successes; 10000 is the first failure.
-        self.assertEqual(
-            kept,
-            sorted(
-                [
-                    video_name("placesphere", "test", 10002, "success"),
-                    video_name("placesphere", "test", 10005, "success"),
-                    video_name("placesphere", "test", 10000, "failure"),
-                ]
-            ),
-        )
+        self.assertEqual(sorted(recorder.kept_states), [10000, 10002, 10005])
+        self.assertEqual(recorder.kept, {"success": 2, "failure": 1})
         for episode in recorder.episodes:
             self.assertEqual(episode["outcome"] == "success", succeeds(episode["seed"]))
-        self.assertFalse((self.output / ".partial").exists() and any((self.output / ".partial").iterdir()))
+            self.assertEqual(episode["kept"], episode["seed"] in recorder.kept_states)
+
+    def test_saves_every_state_of_its_own_episode_without_the_controller(self) -> None:
+        envs = FakeVectorEnv(num_envs=2)
+        recorder = StateRecorder(envs, quota={"success": 1, "failure": 1})
+        run_waves(recorder, envs, [10002, 10003])
+        for seed in (10002, 10003):
+            states = recorder.kept_states[seed]
+            self.assertEqual([tuple(state["actors"]["cube"][0]) for state in states], [(seed, t) for t in range(MAX_STEPS + 1)])
+            self.assertTrue(all("controller" not in state for state in states))
 
     def test_stops_after_the_wave_that_fills_both_quotas(self) -> None:
         envs = FakeVectorEnv(num_envs=2)
-        recorder = make_recorder(envs, self.output, success=1, failure=1)
+        recorder = StateRecorder(envs, quota={"success": 1, "failure": 1})
         waves = run_waves(recorder, envs, list(range(10000, 10010)))
         self.assertEqual(waves, 2)  # 10000/10001 fail, 10002 succeeds in the second wave
         self.assertEqual([episode["seed"] for episode in recorder.episodes], [10000, 10001, 10002, 10003])
 
-    def test_video_holds_every_step_of_its_own_episode_then_the_last_frame(self) -> None:
+    def test_reports_shortfall_when_a_split_has_no_successes(self) -> None:
         envs = FakeVectorEnv(num_envs=2)
-        recorder = make_recorder(envs, self.output, success=1, failure=1, hold_frames=3)
-        run_waves(recorder, envs, list(range(10002, 10004)))
-        frames = frames_of(self.output / video_name("placesphere", "test", 10003, "failure"))
-        expected = [(10003 % 256, t) for t in range(MAX_STEPS + 1)] + [(10003 % 256, MAX_STEPS)] * 3
-        self.assertEqual(frames, expected)
-
-    def test_reports_shortfall_without_failing_when_a_split_has_no_successes(self) -> None:
-        envs = FakeVectorEnv(num_envs=2)
-        recorder = make_recorder(envs, self.output, success=2, failure=1)
+        recorder = StateRecorder(envs, quota={"success": 2, "failure": 1})
         run_waves(recorder, envs, [10001, 10004])
         self.assertEqual(recorder.kept, {"success": 0, "failure": 1})
         self.assertFalse(recorder.done())
 
-    def test_rejects_a_render_camera_of_the_wrong_size(self) -> None:
-        envs = FakeVectorEnv(num_envs=1)
-        recorder = VideoRecorder(
-            envs,
-            self.output,
-            task="placesphere",
-            split="test",
-            quota={"success": 1, "failure": 1},
-            frame_shape=(1080, 1920, 3),
-            hold_frames=0,
-            writer_factory=MemoryWriter,
-        )
-        envs.reset([10000])
+
+class RenderEpisodeTest(unittest.TestCase):
+    def states(self, seed: int) -> list[dict]:
+        return [{"actors": {"cube": np.array([[seed, t]])}} for t in range(MAX_STEPS + 1)]
+
+    def test_rebuilds_the_scene_then_renders_every_state_and_holds_the_last(self) -> None:
+        env, writer = FakeRenderEnv(), MemoryWriter()
+        count = render_episode(env, 10003, self.states(10003), writer, frame_shape=FRAME, hold_frames=3)
+        self.assertEqual(env.resets, [10003])
+        expected = [(10003 % 256, t) for t in range(MAX_STEPS + 1)] + [(10003 % 256, MAX_STEPS)] * 3
+        self.assertEqual(writer.frames, expected)
+        self.assertEqual(count, len(expected))
+        self.assertTrue(writer.closed)
+
+    def test_rejects_a_render_camera_of_the_wrong_size_and_closes_the_writer(self) -> None:
+        env, writer = FakeRenderEnv(), MemoryWriter()
         with self.assertRaisesRegex(RuntimeError, "render camera returned"):
-            recorder.on_reset([10000], None, None)
-        recorder.cleanup()
-        self.assertFalse((self.output / ".partial").exists())
+            render_episode(env, 10000, self.states(10000), writer, frame_shape=(1080, 1920, 3), hold_frames=0)
+        self.assertTrue(writer.closed)
 
 
 class ReferenceTest(unittest.TestCase):
@@ -271,16 +262,12 @@ class EvaluateIntegrationTest(unittest.TestCase):
     def test_recording_does_not_change_evaluation_results(self) -> None:
         seeds = list(range(10000, 10008))
         plain = evaluate(self.Policy(), FakeVectorEnv(2), seeds, torch.device("cpu"), inference_seed=7)
-        with tempfile.TemporaryDirectory() as tmp:
-            envs = FakeVectorEnv(2)
-            recorder = make_recorder(envs, Path(tmp), success=10, failure=10)
-            recorded = evaluate(
-                self.Policy(), envs, seeds, torch.device("cpu"), inference_seed=7, observer=recorder
-            )
-            recorder.cleanup()
-            self.assertEqual(recorded["episodes"], plain["episodes"])
-            self.assertEqual(len(list(Path(tmp).glob("*.mp4"))), len(seeds))
-            self.assertEqual(reference_mismatches(recorder.episodes, plain["episodes"]), [])
+        envs = FakeVectorEnv(2)
+        recorder = StateRecorder(envs, quota={"success": 10, "failure": 10})
+        recorded = evaluate(self.Policy(), envs, seeds, torch.device("cpu"), inference_seed=7, observer=recorder)
+        self.assertEqual(recorded["episodes"], plain["episodes"])
+        self.assertEqual(sorted(recorder.kept_states), seeds)
+        self.assertEqual(reference_mismatches(recorder.episodes, plain["episodes"]), [])
 
 
 if __name__ == "__main__":
