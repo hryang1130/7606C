@@ -1,0 +1,29 @@
+# Vision pooling comparison at N=100, the anchor cell of the PickCube
+# data-size and backbone tracks.
+#
+# The only experiment variable is how the ResNet-18 layer4 map becomes the
+# per-camera feature; both heads project to vision.feature_dim, so the
+# observation encoder and the UNet backbone are unchanged. vision.num_keypoints
+# resolves from the canonical baseline (32) for both arms, so it is a control,
+# not a second variable.
+#
+# [fixed] pins data.num_demos = 100 for every cell. The avg arm is therefore the
+# data-size N=100 cell itself (same resolved config, same run directory) and is
+# reused when its final.pt exists; spatial_softmax runs go to
+# <task>_rgb_unet_ss32_n100_s<seed>.
+[experiment]
+name = "vision_pool_n100"
+variable = "vision.pool"
+values = ["avg", "spatial_softmax"]
+
+[fixed]
+"data.num_demos" = 100
+
+[replicates]
+"avg" = [1, 2, 3]
+"spatial_softmax" = [1, 2, 3]
+
+[diagnostics]
+# Same shared overfitting diagnostic as the other grids: the first 25 demo
+# seeds are contained in the N=100 subset.
+train_eval_episodes = 25
