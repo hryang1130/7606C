@@ -208,11 +208,16 @@ fingerprint，所以一个 checkpoint 能追溯到具体的数据文件。
 
 ## 汇报视频（1080p 成功 / 失败 rollout）
 
-`scripts/record_rollout_videos.py` 按 `eval_dp.py` 的方式（同样的种子顺序、`num_envs` 和推理种子）
-重跑一个 checkpoint，从 ManiSkill 的展示相机 `render_camera` 录 1920×1080 的 H.264 MP4（`-crf 16`，
-yuv420p，PowerPoint 可直接播放），保留前 `--success` 个成功和前 `--failure` 个失败回合（默认各 3 个），
-凑够后提前停止。成败按 `success_once` 判定。策略仍然只看 128×128 的传感器相机；展示相机只多加
-`render_mode` 和 `human_render_camera_configs`，不改物理和观测。
+`scripts/record_rollout_videos.py` 按 `eval_dp.py` 的方式（同样的评估环境、种子顺序、`num_envs` 和
+推理种子）重跑一个 checkpoint，只记录每一步的仿真状态（`get_state_dict`），保留前 `--success` 个成功和
+前 `--failure` 个失败回合（默认各 3 个，按 `success_once` 判定），凑够后提前停止。评估结束后，每个保留的
+回合在**单独新启动的进程**里按状态逐帧重放，从 ManiSkill 的展示相机 `render_camera` 录成 1920×1080 的
+H.264 MP4（`-crf 16`，yuv420p，PowerPoint 可直接播放）。
+
+评估和渲染分开，是因为在 macOS（MoltenVK）上实测到两个问题：在评估环境里渲染展示相机，会让随后几步
+策略看到的传感器图像出错；同一进程建到第三个场景后，展示相机画面整片发绿。NVIDIA 上是否也这样没有
+测过，现在的流程让这两种情况都不会发生。按状态重放的画面与实时渲染一致（三个任务各 41 帧，只有 1 个
+像素有可见差异）。
 
 脚本默认读取同一 run 的已保存评估 `eval/<split>_<checkpoint>[_h<N>].json`，复用它的 `num_envs` 和
 回合步数，并逐回合核对 `success_once`，所以视频就是成功率背后的那些回合；不一致会写进
