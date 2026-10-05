@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -57,13 +59,38 @@ class SpatialSoftmax(nn.Module):
         self.num_keypoints = num_keypoints
         self.keypoints = nn.Conv2d(in_channels, num_keypoints, kernel_size=1)
         self.temperature = nn.Parameter(torch.ones(1))
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Start the attention near-uniform, like robomimic's SpatialSoftmax.
+
+        The keypoint conv must not inherit :meth:`ResNet18Encoder._initialize`:
+        its ``kaiming_normal_(mode="fan_out")`` gives a ``512 -> K`` 1x1 conv a
+        weight std of ``sqrt(2 / K)`` (~0.25 here), ten times PyTorch's default.
+        The logits then start large enough that the softmax saturates to a
+        one-hot pick, and a saturated soft-argmax has *exactly zero* gradient
+        with respect to its logits, so the keypoints freeze wherever they
+        happened to be and the camera branch collapses to a constant.
+
+        That is not hypothetical: the first vision-pool run died this way. Its
+        checkpoints show softmax entropy 0.000 of a possible 2.773 nats,
+        keypoint coordinates with std 0.00000 across 24 windows from 50 demos,
+        and a keypoint-conv gradient ~1/200 of the adjacent projection's
+        (``report/exp_vision_pool_n100.md`` section 5). PyTorch's default
+        ``kaiming_uniform_(a=sqrt(5))`` keeps the initial logits small.
+        """
+        nn.init.kaiming_uniform_(self.keypoints.weight, a=math.sqrt(5))
+        nn.init.zeros_(self.keypoints.bias)
+        nn.init.ones_(self.temperature)
 
     def forward(self, feature: torch.Tensor) -> torch.Tensor:
         logits = self.keypoints(feature)
         count, _, height, width = logits.shape
         with torch.amp.autocast(logits.device.type, enabled=False):
             logits = logits.float().reshape(count, self.num_keypoints, height * width)
-            attention = F.softmax(logits / self.temperature.float(), dim=-1)
+            # Floor the temperature: shrinking it is another way to saturate the
+            # softmax and kill the coordinate gradient.
+            attention = F.softmax(logits / self.temperature.float().clamp(min=0.1), dim=-1)
             pos_y, pos_x = torch.meshgrid(
                 torch.linspace(-1.0, 1.0, height, device=logits.device),
                 torch.linspace(-1.0, 1.0, width, device=logits.device),
@@ -117,6 +144,11 @@ class ResNet18Encoder(nn.Module):
                 nn.Linear(2 * num_keypoints, feature_dim),
             )
         self.apply(self._initialize)
+        if pool != "avg":
+            # ``_initialize`` above is the ResNet scheme and also matches the
+            # keypoint conv; restore the head's own init (see
+            # SpatialSoftmax.reset_parameters).
+            self.head[0].reset_parameters()
 
     @staticmethod
     def _layer(in_channels: int, out_channels: int, stride: int) -> nn.Sequential:

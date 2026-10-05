@@ -55,6 +55,11 @@ run 目录名由 `default_run_name` 自动生成：
 | 4 | **提交训练** | `sbatch ... EXPERIMENT=configs/experiments/vision_pool_n100.toml ... slurm/train_dual_gpu.sbatch` → **job 136100** | 10-05 **15:36:50** 起跑，节点 `gpu-4080-414` | 跳过 3 个 avg run；worker0/1 = ss32 s1 / s2 |
 | 5 | 前置诊断 | **job 136096**（N=100 × s1–s5 × 10k/30k/60k/100k） | 10-05 15:00–15:27 | 见 §1；结果在各 run `eval/test_step_*.json` |
 | 6 | 并发限制探针 | **job 136101**（2 分钟空作业，已 scancel） | 10-05 ~15:58 | `PENDING / AssocGrpGRES` → 训练占满 2 卡时提不了第二个 GPU 作业 |
+| 7 | 闭环评估（第 1 次） | **job 136118**（12 次评估） | 10-05 19:09–19:34 | ss32 = 0.007 vs avg = 0.180；诊断见 §5 |
+| 8 | 留证并删除无效 run | 12 份评估汇总存到 `report/exp_vision_pool_n100_deadinit_evals.json`，然后删除 `pickcube_rgb_unet_ss32_n100_s1..s3` | 10-05 ~19:55 | 释放 ~8 GB（可用 23G → 31G）；**必须删**，否则修好后 config 未变会被判 completed 而 skip |
+| 9 | 修 keypoint head | `dp-manip/dp_manip/vision.py`（F1） | 10-05 ~20:00 | 见 §7.2；实测 logits std 7.3→0.8、熵 0.748→2.68、坐标跨输入 std 0→0.05、keypoint 梯度比 0.005→1.2 |
+| 10 | 加回归测试 | `dp-manip/tests/test_vision_pool.py` 新增两条断言 | 10-05 ~20:05 | 阈值按上面的实测值留了余量 |
+| 11 | **重新提交训练** | `sbatch ... EXPERIMENT=configs/experiments/vision_pool_n100.toml ...` → **job 136121** | 10-05 20:20 起跑，节点 `gpu-4080-413` | plan 复核 `6 runs, 3 completed (skipped), 3 pending, 0 conflict`；worker0/1 = ss32 s1 / s2 |
 
 提交模板（先 `plan` 确认复用/pending 数量，再 `sbatch`）：
 
@@ -88,23 +93,60 @@ sbatch --partition=batch --open-mode=append \
 每个 run 落盘：`step_010000.pt` / `step_030000.pt` / `step_060000.pt` / `final.pt`
 （`resume.pt` 是断点续训用的原始权重，不能用于评测）。
 
-## 5. 评估计划（待做）
+## 5. 评估：结果与诊断（2026-10-05 晚）
 
-用 `~/7606C/eval_ss32_checkpoint_scan.sbatch`：3 seed × 4 checkpoint = **12 次评估**，
-2 卡并行约 25 min。
+评估用 `~/7606C/eval_ss32_checkpoint_scan.sbatch`（3 seed × 4 checkpoint = 12 次，job **136118**，
+19:09:10 → 19:34:18，`0 failed`）。结果写在各 run 的
+`eval/test_{step_010000,step_030000,step_060000,final}.json`，未覆盖 avg 臂的文件。
 
-```bash
-sbatch --partition=batch --open-mode=append ~/7606C/eval_ss32_checkpoint_scan.sbatch
-```
+### 5.1 结果：ss32 崩了
 
-结果写到各 run 的 `eval/test_{step_010000,step_030000,step_060000,final}.json`（不覆盖 avg 臂的文件）。
+`success_once`（s1–s3 均值）：
 
-对照表（avg 臂 s1–s3 均值，`success_once`，已测得）：
+| arm | 10k | 30k | 60k | **100k** | `success_at_end` @100k |
+| --- | --- | --- | --- | --- | --- |
+| avg | **0.167** | **0.153** | **0.163** | **0.180** | 0.127 |
+| ss32 | 0.000 | 0.003 | 0.003 | **0.007** | 0.003 |
 
-| arm | 10k | 30k | 60k | 100k |
-| --- | --- | --- | --- | --- |
-| avg | 0.167 | 0.153 | 0.163 | 0.180 |
-| ss32 | ? | ? | ? | ? |
+三个 seed 的 100k 分别是 0.010 / 0.000 / 0.010 —— 不是"略差"，是**几乎完全不会做**。
+
+### 5.2 诊断：spatial softmax head 在训练中饱和，相机分支变成常数
+
+离线检查 12 次评估用的三个 `final.pt`（24 个窗口，跨 50 条示范）＋对照 avg 臂：
+
+| 指标 | avg | ss32 (s1/s2/s3) |
+| --- | --- | --- |
+| softmax 熵（nats，均匀 = 2.773） | — | **0.000 / 0.001 / 0.000** → one-hot |
+| 关键点坐标跨输入 std | — | **0.00000**（完全不变） |
+| argmax 位置"与第 0 个输入相同"的比例 | — | **1.00**（100% 固定） |
+| 相机特征跨输入 std | 0.036 | **0.00000**（常数） |
+| temperature | — | 0.989 / 0.995 / 0.990（从初值 1.0 基本没动） |
+| logits std | — | ≈ 19.5 |
+
+也就是说：**每张图都被映射成同一个相机特征**，encoder 的相机分支是死的，策略只剩 proprio + 时间步可用
+（`Dobs = 128 + 29`，坏的正好是那 128 维）。PickCube 的物体位姿不在 proprio 里，所以闭环成功率 ≈ 0；
+训练 loss 还能降到 1e-4 是因为示范里的动作很大程度上由机械臂自身状态决定。
+
+**为什么会饱和**：soft-argmax 的坐标是 `softmax(logits/T) @ positions`。一旦 softmax 变成 one-hot，
+它对 logits 的导数就归零 —— keypoints 卷积再也收不到梯度，关键点位置被永久冻结。实测
+`grad|keypoints conv = 7.4e-4` vs `grad|head Linear = 1.5e-1`（小 200 倍），吻合。
+
+**根因是初始化**：`dp_manip/vision.py` 的 `ResNet18Encoder._initialize` 对**所有** `nn.Conv2d` 都用
+`nn.init.kaiming_normal_(weight, mode="fan_out", nonlinearity="relu")`，其中也包括
+`SpatialSoftmax.keypoints = Conv2d(512 → 32, kernel 1)`。`fan_out = 32` → 权重 std ≈ 0.25，作用在 512 维
+内积上 → 初始 logits std ≈ **7.3**，而 softmax 只在 16 个格子上、温度 ≈ 1 —— 起始就已经很尖
+（熵 0.748 / 2.773），训练中 logits 继续涨到 std ≈ 19.5 就彻底 one-hot，然后梯度消失、关键点冻结。
+
+这个 1×1 keypoint 卷积需要它自己的初始化（零初始化，或至少按 `1/sqrt(512)` 缩放），不能沿用 ResNet 的卷积初始化；
+另外温度参数需要下界 / 更好的参数化，防止 logits 无界增长。
+
+### 5.3 结论：这次运行不构成对 pool 假设的检验
+
+本次对照实际比的是「**坏掉的相机分支** vs avg」，不是「spatial softmax vs avg」。因此
+**原假设（encoder 池化是 UNet 的瓶颈）仍然未被检验**，不能据此说"spatial softmax 没用"。
+
+而且这个 bug 是**仓库级的**：`configs/experiments/vision_pool.toml`（peginsertionside, N=200,
+avg vs ss32）走的是同一条 `ResNet18Encoder` 初始化路径，如果那条线已经跑过，它的 ss32 臂同样无效。
 
 ## 6. 机时
 
@@ -115,12 +157,100 @@ sbatch --partition=batch --open-mode=append ~/7606C/eval_ss32_checkpoint_scan.sb
 | 评估 12 次（待做） | ≈ 12 × 3.5 = **42 GPU-min** |
 | 合计 | ≈ **410 GPU-min** |
 
-## 7. 后续
+## 7. 若 spatial_softmax 收益不高，下一步做什么
 
-1. 出数字后并入 `report_pickcube_yhr.md`（新增一节），或按结果决定是否单独成篇。
-2. 若 spatial_softmax 明显拉起来 → 补 seed 4、5；并考虑把 spatial softmax 接到 `layer3`
-   （128×128 输入到 layer4 只剩 4×4，`configs/README.md` 已把这一条标为待定）。
-3. 若没有变化 → 下一批候选是相机数（论文 2 视角 vs 本仓库 1 视角）和增广方式
-   （论文 random crop 76/84 vs 本仓库 `random_shift=4`）。
-4. `dp-manip/` 是 subtree：这个 spec 的理想路径是先推到 `hollinsStuart/dp-manip` 上游再
-   `git subtree pull`；直接在本仓库提交，下次 subtree pull 时可能冲突。
+### 7.1 决策规则（2026-10-05 晚，按 §5 的结果更新）
+
+§5 的结果显示 ss32 臂的相机分支是死的，所以：
+
+- **当前结论**：pool 假设是**未被检验**，不是被否掉。下一步不是换假设，而是**修 bug 后重跑**（F1）。
+- **修好之后**再分叉：
+  - 若 ss32 明显拉起来（例如 N=100 ≥ 0.4）→ encoder 的条件信号确实是瓶颈，继续 B1 / B2。
+  - 若仍然 ≈ avg（≤ 0.25）→ 这条假设才算被否掉，转 §7.2 的诊断 + §7.4 的 εθ 侧 + §7.5 的数据侧。
+
+### 7.2 先修 bug（P0，必须先做），以及零成本诊断
+
+**F1. 修 keypoint head 的初始化与温度（已完成，job 136121 用的就是这个修复）**
+
+- 病因：`ResNet18Encoder._initialize` 对所有 `Conv2d` 用 `kaiming_normal_(mode="fan_out")`，
+  连 `SpatialSoftmax.keypoints`（512→32，1×1）也吃到了 → 权重 std ≈ 0.25（PyTorch 默认 ≈0.026，
+  robomimic 就用默认）→ 初始 logits std ≈ 7.3 → 16 个格子 + 温度 1 → 训练中涨到 std ≈ 19.5、
+  熵归零、坐标梯度恒为 0、关键点冻结（§5.2）。
+- 已做的修改（`dp-manip/dp_manip/vision.py`）：
+  1. 新增 `SpatialSoftmax.reset_parameters()`，用 PyTorch 默认的 `kaiming_uniform_(a=sqrt(5))`
+     + 零 bias + 温度 1；
+  2. `ResNet18Encoder.__init__` 在 `self.apply(self._initialize)` 之后，对 `pool != "avg"`
+     重新调用该初始化，避免 ResNet 的规则误伤 keypoint 卷积；
+  3. `forward` 里温度加下界 `clamp(min=0.1)`，堵住"温度→0 也同样会饱和"这条路。
+- 实测（修复前 → 修复后，128×128、4 张随机图）：logits std 7.3 → 0.8；softmax 熵 0.748 → 2.68
+  （上限 2.773）；关键点坐标跨输入 std 0.00000 → 0.05；`grad|keypoints / grad|head Linear`
+  0.005 → 1.2。
+- 回归测试：`dp-manip/tests/test_vision_pool.py` 新增 `test_keypoint_head_does_not_start_saturated`
+  与 `test_keypoint_conv_gets_a_usable_gradient`（阈值按实测留了余量）。
+- **作废的产物**：第 1 次 run 的 `pickcube_rgb_unet_ss32_n100_*` 已删除（汇总留在
+  `report/exp_vision_pool_n100_deadinit_evals.json`）；`configs/experiments/vision_pool.toml`
+  （peginsertionside）里任何 ss32 臂也是同样无效的，用之前要先确认是否已跑过。
+
+下面是**不需要训练**的诊断：
+
+| # | 做法 | 代价 | 想回答的问题 |
+| --- | --- | --- | --- |
+| A1 | 统计示范里每步的动作变化幅度 `‖a_{t+1} − a_t‖`，特别是夹爪那一维的取值分布 | 0 | 动作序列到底有多"尖锐" |
+| A2 | 用 env 的 reward/info 记录失败回合卡在哪个子目标（接近 / 抓取 / 抬起），复用 `evaluate` 的 observer 钩子 | ~1 次 eval（4 GPU-min） | 失败是"看不见"还是"抓不住 / 握不稳" |
+| A3 | dump 少量 `base_camera` 帧，看 128×128 单视角下方块与夹爪的相对位置是否可分辨、有无遮挡 | 0 | 观测本身是否够用 |
+
+**A1 为什么值得先做。** 论文自己写过，CNN backbone
+
+> *"it performs poorly when the desired action sequence changes quickly and sharply through time
+> (such as velocity command action space), likely due to the inductive bias of temporal
+> convolutions to prefer low-frequency signals"*
+
+PickCube 的动作空间是 `pd_ee_delta_pos`，夹爪闭合就是一个近乎阶跃的事件。如果 A1 显示这个切换很尖锐，
+那 UNet 输给 MLP / Transformer 就可能**不是感知问题，而是时序平滑偏置** —— 后面的资源就该转向 εθ 的
+时序建模，而不是继续调 encoder。报告 §3.1 里 `success_once` 比 `success_at_end` 高 6.4/100
+（"抓到过又掉了"）和"抓取保持不稳定"是一致的。
+
+### 7.3 同一条轴：继续调 encoder
+
+| # | 改动 | 理由 | 代价 |
+| --- | --- | --- | --- |
+| B1 | spatial softmax 改从 `layer3`（8×8）读，而不是 `layer4`（4×4） | 128×128 / stride 32 → layer4 只有 16 个位置；`configs/README.md` 已把这条标为待定 | 3 run ≈ 310 GPU-min |
+| B2 | `vision.num_keypoints` 32→64、`vision.feature_dim` 128→256 | 容量档。config README 明确要求它必须是**独立实验**（`variable = "vision.num_keypoints"`），不能混进同一个矩阵 | 各 3 run |
+| B3 | 增广对齐论文：random crop（76/84）替代或叠加 `random_shift=4`，可再加颜色抖动 | 论文的 crop 是它 image 配置的一部分，本仓库只有 DrQ 平移 | 3 run |
+| B4 | 预训练视觉编码器（ImageNet-21k / R3M / CLIP），冻结或 10× 小学习率微调 | 小样本下常见的最大杠杆。论文 §4.4.5 在自己的设定里得出"从零训练更好"，但那是 200 条 + 3000 epoch | 中（拉权重 + 3 run） |
+
+### 7.4 εθ 那一侧：动 UNet 自己
+
+| # | 改动 | 理由 | 代价 |
+| --- | --- | --- | --- |
+| C1 | 容量 / 正则对齐：`unet_dims [64,128,256]`，或 weight decay 1e-6 → 1e-4/1e-2，或加 dropout | UNet 是唯一把训练集背到 `train_loss ≈ 5e-4` 的主干；报告 §7.1 已把"容量对齐档"标为不进主表的补充 | 3 run |
+| C2 | 换条件化通路：obs 直接 concat 到 UNet 输入（官方 `obs_as_global_cond=False` 那条），或让 UNet 也吃 obs token | 直接检验本文的"FiLM 带宽"假设，而不只是换特征 | 小改代码 + 3 run |
+| C3 | 对齐官方 image UNet 超参：`down_dims [512,1024,2048]`、`diffusion_step_embed_dim 128`（官方 workspace 值；本仓库是 `[256,512,1024]` 和 256） | 排掉"只是超参没对齐"这个可能 | 3 run |
+
+### 7.5 数据 / 任务侧（贵，但可能是最大的）
+
+| # | 做法 | 理由 | 代价 |
+| --- | --- | --- | --- |
+| D1 | 加第二个视角（wrist / eye-in-hand） | 论文 image 配置是 2 视角；本仓库只有 `base_camera` 一个。对 PegInsertionSide / PlugCharger 这类接触密集任务，单视角很可能是硬伤 | 用 Demogen 重新生成数据（含第二相机）+ 重训，最大 |
+| D2 | 加数据 | val loss 在 N=400 仍是干净的 N^−0.668 幂律，UNet 明显还没吃够数据 | 先用外推算"把 0.19 追到 0.9 要多少条"；若外推到不可行就直接排除 |
+
+### 7.6 优先级建议
+
+1. **P0** F1（修 keypoint head）＋ A1–A3 诊断（≈ 0–5 GPU-min）：F1 是所有 ss 实验的前置条件，
+   A1–A3 则把"感知 / 时序 / 观测不足"分开。
+2. **P1** 修好后的 ss32 重跑、B1（layer3）、C1（容量与正则）—— 各 3 run，最有可能直接命中已经观测到的两个现象
+   （encoder 条件瓶颈、UNet 过拟合）。
+3. **P2** B3、C2、C3。
+4. **P3** B2、B4。
+5. **P4** D1、D2：要动数据，应该等前面几条给出方向再做。
+
+### 7.7 与论文的协议差异（若要严格复现）
+
+论文 image 任务训练 **3000 epochs**，表格数字是 **(max performance) / (最后 10 个 checkpoint 平均，
+每 50 epoch 存一次)**；本仓库是 829 epochs（100k 步）+ 只报 `final.pt`。§1 已经用 job 136096 排除了
+"best checkpoint 能救回来"，但如果要走"严格复现论文"的路线，epoch 数与 checkpoint 口径必须一起对齐。
+
+### 7.8 上游同步
+
+`dp-manip/` 是 subtree：这个 spec 的理想路径是先推到 `hollinsStuart/dp-manip` 上游再 `git subtree pull`；
+直接在本仓库提交，下次 subtree pull 时可能冲突。

@@ -166,6 +166,51 @@ class SpatialSoftmaxEncoderTest(unittest.TestCase):
         self.assertEqual(keypoints.shape, (3, 8, 2))
         self.assertTrue(((keypoints >= -1.0) & (keypoints <= 1.0)).all())
 
+    def test_keypoint_head_does_not_start_saturated(self) -> None:
+        """Guards the dead-encoder bug of the first vision-pool run.
+
+        ``ResNet18Encoder._initialize`` gives *every* Conv2d
+        ``kaiming_normal_(mode="fan_out")``. On the 512 -> K keypoint conv that
+        is a weight std of ``sqrt(2 / K)`` (~0.25 here), ten times PyTorch's
+        default, which makes the logits large enough for the soft-argmax to
+        saturate to a one-hot pick. A saturated soft-argmax has *exactly zero*
+        gradient with respect to its logits, so the keypoints freeze and the
+        camera branch becomes input-independent: the first pool run measured
+        softmax entropy 0.000 of 2.773 nats, keypoint std 0.00000 across 24
+        windows from 50 demos, and a constant 128-d feature. See
+        ``report/exp_vision_pool_n100.md`` section 5.
+        """
+        encoder = self.encoder("spatial_softmax", num_keypoints=8)
+        head = encoder.head[0]
+        images = torch.randn(4, 3, 128, 128)
+        with torch.no_grad():
+            feature_map = encoder.feature_map(images)
+            logits = head.keypoints(feature_map)
+            attention = torch.softmax(
+                logits.float().reshape(4, head.num_keypoints, -1) / head.temperature, dim=-1
+            )
+            entropy = -(attention * torch.log(attention + 1e-12)).sum(-1).mean()
+            keypoints = head(feature_map)
+        # Uniform attention over the 4x4 layer4 grid is log(16) = 2.773 nats.
+        self.assertLess(float(logits.std()), 2.0)
+        self.assertGreater(float(entropy), 1.8)
+        # A frozen head maps every image to the same keypoints.
+        self.assertGreater(float(keypoints.std(dim=0).mean()), 1e-2)
+        self.assertGreaterEqual(float(head.temperature), 0.1)
+
+    def test_keypoint_conv_gets_a_usable_gradient(self) -> None:
+        """The keypoint conv must not be gradient-starved relative to its head.
+
+        On the broken run its gradient was ~1/200 of ``head.2``'s, which is the
+        signature of a saturated softmax.
+        """
+        encoder = self.encoder("spatial_softmax", num_keypoints=8)
+        encoder(torch.randn(4, 3, 128, 128)).square().mean().backward()
+        parameters = dict(encoder.named_parameters())
+        keypoint = float(parameters["head.0.keypoints.weight"].grad.norm())
+        projection = float(parameters["head.2.weight"].grad.norm())
+        self.assertGreater(keypoint, 0.1 * projection)
+
     def test_keypoint_follows_a_peak(self) -> None:
         pool = SpatialSoftmax(1, 1)
         with torch.no_grad():

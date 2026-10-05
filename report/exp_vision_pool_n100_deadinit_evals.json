@@ -1,0 +1,133 @@
+{
+  "note": "ss32 N=100 runs produced with the broken keypoint-conv init (dead camera branch); full run directories were deleted before the fixed rerun. See report/exp_vision_pool_n100.md section 5.",
+  "job": 136118,
+  "arm": "spatial_softmax",
+  "runs": {
+    "pickcube_rgb_unet_ss32_n100_s1": {
+      "test_step_010000.json": {
+        "checkpoint_step": 10000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 243.62470316886902,
+        "mean_inference_ms": 659.2516040802002
+      },
+      "test_step_030000.json": {
+        "checkpoint_step": 30000,
+        "success_once": 0.01,
+        "success_at_end": 0.01,
+        "episode_len": 100.0,
+        "return": 0.23,
+        "num_episodes": 100,
+        "wall_time_s": 244.6473686695099,
+        "mean_inference_ms": 664.2618876237136
+      },
+      "test_step_060000.json": {
+        "checkpoint_step": 60000,
+        "success_once": 0.01,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.02,
+        "num_episodes": 100,
+        "wall_time_s": 211.34143781661987,
+        "mean_inference_ms": 568.4432066403903
+      },
+      "test_final.json": {
+        "checkpoint_step": 100000,
+        "success_once": 0.01,
+        "success_at_end": 0.01,
+        "episode_len": 100.0,
+        "return": 0.03,
+        "num_episodes": 100,
+        "wall_time_s": 208.9454550743103,
+        "mean_inference_ms": 559.5087968386136
+      }
+    },
+    "pickcube_rgb_unet_ss32_n100_s2": {
+      "test_step_010000.json": {
+        "checkpoint_step": 10000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 240.92141723632812,
+        "mean_inference_ms": 651.2874258481539
+      },
+      "test_step_030000.json": {
+        "checkpoint_step": 30000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 229.01064229011536,
+        "mean_inference_ms": 619.0463234828069
+      },
+      "test_step_060000.json": {
+        "checkpoint_step": 60000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 213.31839728355408,
+        "mean_inference_ms": 572.6116781968337
+      },
+      "test_final.json": {
+        "checkpoint_step": 100000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 204.31681060791016,
+        "mean_inference_ms": 547.2502414996808
+      }
+    },
+    "pickcube_rgb_unet_ss32_n100_s3": {
+      "test_step_010000.json": {
+        "checkpoint_step": 10000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 237.9767928123474,
+        "mean_inference_ms": 644.657540688148
+      },
+      "test_step_030000.json": {
+        "checkpoint_step": 30000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 233.98297572135925,
+        "mean_inference_ms": 633.1298270592323
+      },
+      "test_step_060000.json": {
+        "checkpoint_step": 60000,
+        "success_once": 0.0,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.0,
+        "num_episodes": 100,
+        "wall_time_s": 210.94372606277466,
+        "mean_inference_ms": 565.5377358656663
+      },
+      "test_final.json": {
+        "checkpoint_step": 100000,
+        "success_once": 0.01,
+        "success_at_end": 0.0,
+        "episode_len": 100.0,
+        "return": 0.22,
+        "num_episodes": 100,
+        "wall_time_s": 206.1418116092682,
+        "mean_inference_ms": 550.6376875363864
+      }
+    }
+  }
+}
