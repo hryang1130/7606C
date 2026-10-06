@@ -1,6 +1,9 @@
 # dp-manip：集群 RGB Diffusion Policy
 
-本目录是六个 ManiSkill 任务的 **RGB-based Diffusion Policy** 训练与评估工程。数据由
+实验进展、已有实测结果、Insertion 负结果分析及汇报 PPT 素材见
+[实验进展与结果汇总](docs/experiment-progress.zh-CN.md)。
+
+本目录是八个 ManiSkill 任务的 **RGB-based Diffusion Policy** 训练与评估工程。数据由
 `maniskill-demogen` 生成；训练/评估面向 Linux GPU 集群。当前 QOS 每用户只允许 **1 个已提交
 作业**，单作业最多 2 张 GPU，因此生产入口是**一个双 GPU 作业内的动态队列**（两个 worker
 各绑定一张 GPU，先完成的 worker 立即领取下一个 run），不再使用 Job Array。
@@ -10,7 +13,7 @@
 按示范 seed 升序排序后的前 N 条，与 HDF5 导出顺序和 `episode_id` 无关；因此不同训练
 种子看到完全相同的示范，种子间方差只反映优化随机性。
 
-## 六个任务
+## 八个任务
 
 | 配置 | 环境 | 控制模式 | 动作维 | 评估步数 |
 | --- | --- | --- | ---: | ---: |
@@ -20,11 +23,24 @@
 | `tasks/pullcube.toml` | PullCube-v1 | `pd_ee_delta_pos` | 4 | 100 |
 | `tasks/peginsertionside.toml` | PegInsertionSide-v1 | `pd_joint_pos` | 8 | 300 |
 | `tasks/plugcharger.toml` | PlugCharger-v1 | `pd_joint_pos` | 8 | 200 |
+| `tasks/placesphere.toml` | PlaceSphere-v1 | `pd_ee_delta_pos` | 4 | 200 |
+| `tasks/liftpegupright.toml` | LiftPegUpright-v1 | `pd_joint_pos` | 8 | 50（待定） |
 
-PegInsertionSide 与 PlugCharger 使用 `pd_joint_pos`，与 `maniskill-demogen/tasks.py` 的最终数据一致。
+PlaceSphere 和 LiftPegUpright 的新配置沿用全部 baseline 与实验网格。评估步数不能直接用
+ManiSkill 的注册值（两者都是 50）：PlaceSphere 的示范有 90–150 步，50 步时评估全部失败，
+现改为 200；2026-10-03 之前训练的 PlaceSphere run 记录的是 50，评估时加
+`--max-episode-steps 200`。LiftPegUpright 的 50 尚未按示范长度核对，生成数据后按
+[任务负责人操作手册](docs/task-owner-runbook.zh-CN.md) §3 确定。训练启动时若评估步数短于最长
+示范，会直接报错。
+
+PegInsertionSide、PlugCharger 与 LiftPegUpright 使用 `pd_joint_pos`，与 `maniskill-demogen/tasks.py` 的最终数据一致。
 绝对关节目标会先按训练子集做 min-max 归一化，执行时还原，不裁剪到 `[-1, 1]`。
 
 ## 数据契约
+
+完整 state 的 PegInsertionSide N=100、seed=1 诊断对照已接入统一流程，使用独立的
+`_state_` run 目录。配置、数据检查及单 GPU 训练→验证→测试命令见
+[state 对照说明](docs/peginsertion-state.zh-CN.md)；默认主线仍使用 RGB。
 
 每个 split 使用 `maniskill-demogen/data/dataset/` 下的文件：
 
@@ -32,7 +48,7 @@ PegInsertionSide 与 PlugCharger 使用 `pd_joint_pos`，与 `maniskill-demogen/
 {train,val}/<Env>/motionplanning/trajectory.state.<control>.physx_cpu.h5
 ```
 
-训练只读取：
+RGB 训练只读取：
 
 ```text
 traj_i/obs_rgb/rgb    uint8   (T+1, 128, 128, 3*C)
@@ -74,7 +90,7 @@ export RUN_ROOT=$HOME/dp-runs
 # 1. 登录节点建环境
 ./setup.sh
 
-# 2. 在提交作业前检查六套数据（DATA_ROOT 指向 demogen 的 data/dataset）
+# 2. 在提交作业前检查八套数据（DATA_ROOT 指向 demogen 的 data/dataset）
 .venv/bin/python scripts/inspect_dataset.py --data-root "$DATA_ROOT"
 
 # 3. Gate B：确认每个实验矩阵的 resolved config 只在声明的实验变量上不同

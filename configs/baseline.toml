@@ -1,4 +1,5 @@
 [task]
+obs_mode = "rgb"
 sim_backend = "physx_cpu"
 shader_pack = "minimal"
 

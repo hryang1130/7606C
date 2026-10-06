@@ -98,6 +98,34 @@ val_path = "val.h5"
             self.assertEqual(set(tomllib.load(stream)), {"legacy"})
         self.assertEqual(load(path), load(TASKS / "pickcube.toml"))
 
+    def test_new_tasks_reuse_baseline(self) -> None:
+        baseline = load(TASKS / "pickcube.toml").to_dict()
+        for name, env_id, horizon, mode in (
+            ("placesphere", "PlaceSphere-v1", 200, "pd_ee_delta_pos"),
+            ("liftpegupright", "LiftPegUpright-v1", 50, "pd_joint_pos"),
+        ):
+            with self.subTest(task=name):
+                cfg = load(TASKS / f"{name}.toml")
+                self.assertEqual(cfg.task.env_id, env_id)
+                self.assertEqual(cfg.task.max_episode_steps, horizon)
+                self.assertEqual(cfg.task.control_mode, mode)
+                self.assertEqual(load(ROOT / "configs" / f"{name}_rgb.toml"), cfg)
+                actual = cfg.to_dict()
+                for split in ("train", "val"):
+                    key = f"{split}_path"
+                    self.assertEqual(
+                        actual["data"].pop(key),
+                        f"{split}/{env_id}/motionplanning/"
+                        f"trajectory.state.{mode}.physx_cpu.h5",
+                    )
+                expected = {key: value for key, value in baseline.items() if key != "task"}
+                expected["data"] = {
+                    key: value for key, value in baseline["data"].items()
+                    if key not in ("train_path", "val_path")
+                }
+                actual.pop("task")
+                self.assertEqual(actual, expected)
+
     def test_num_demos_accepts_any_positive_integer(self) -> None:
         task = TASKS / "pickcube.toml"
         self.assertEqual(load(task, ["data.num_demos=37"]).data.num_demos, 37)

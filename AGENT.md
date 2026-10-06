@@ -2,7 +2,7 @@
 
 ## 当前权威流程
 
-1. 只训练 `maniskill-demogen` 导出的 `obs_rgb/rgb + obs_rgb/state`，不得回退到 `traj_i/obs`。
+1. 默认 RGB 主线只读取 `maniskill-demogen` 导出的 `obs_rgb/rgb + obs_rgb/state`。显式设置 `task.obs_mode="state"` 的诊断对照读取 `traj_i/obs` 完整 state，不读取图像；不得在 RGB 模式下回退到完整 state。state 对照通过正式统一流程运行，使用独立的 `_state_` run 目录。
 2. 任务、控制模式和文件名以 `configs/*_rgb.toml` 与 `maniskill-demogen/tasks.py` 为准。
 3. 数据量研究的嵌套子集、训练种子数、100k 固定步数和 held-out seed 段不得随结果改动。
 4. 训练在集群 GPU 节点运行；训练代码本身不得 import ManiSkill。只有闭环评估依赖 ManiSkill。

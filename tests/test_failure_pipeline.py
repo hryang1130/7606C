@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_failure_study import (  # noqa: E402
     HAVE_TORCH,
+    MAX_STEPS,
     PROTOCOL,
     ROOT,
     TASK,
@@ -51,7 +52,7 @@ class FailurePipelineTest(unittest.TestCase):
         base = [
             "--task", TASK, "--run-root", str(run_root), "--rollout-root", str(rollout_root),
             "--protocol", str(protocol), "--lock", str(lock), "--device", "cpu",
-            "--finetune-set", "train.warmup_steps=1",
+            "--finetune-set", "train.warmup_steps=1", "--max-episode-steps", str(MAX_STEPS),
         ]
 
         def run(*extra: str, factory=fake_envs) -> int:
@@ -73,6 +74,9 @@ class FailurePipelineTest(unittest.TestCase):
         self.assertFalse((run_root / "failure_aware").exists())
         self.assertEqual(run(), 0)  # still paused, nothing re-collected
         self.assertNotIn("collect train", self.last_output)
+        self.assertEqual(locked("task.max_episode_steps"), MAX_STEPS)
+        with self.assertRaisesRegex(ValueError, "lock file's horizon is 12"):
+            run("--max-episode-steps", str(MAX_STEPS + 1))
 
         # 2. Past the budget pause: pilot, remaining models and the offline gate.
         self.assertEqual(run("--budget-confirmed"), 0)

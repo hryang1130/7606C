@@ -37,21 +37,40 @@ def baseline_run_dir(run_root: Path, task: str, num_demos: int, seed: int) -> Pa
     return Path(run_root) / f"{task}_rgb_unet_n{num_demos}_s{seed}"
 
 
-def read_val_success(run_root: Path, task: str, num_demos: int, seeds: Sequence[int]) -> list[float] | None:
-    """``success_once`` of each seed's ``eval/val_final.json``; ``None`` if any is missing."""
+def val_result_name(max_episode_steps: int | None) -> str:
+    """``scripts/eval_dp.py``'s validation result name; an overridden horizon adds ``_h<N>``."""
+    return "val_final.json" if max_episode_steps is None else f"val_final_h{max_episode_steps}.json"
+
+
+def read_val_success(
+    run_root: Path, task: str, num_demos: int, seeds: Sequence[int], max_episode_steps: int | None = None
+) -> list[float] | None:
+    """``success_once`` of each seed's validation result; ``None`` if any is missing.
+
+    With ``max_episode_steps`` the results evaluated at that horizon are read,
+    and a result that records another horizon is rejected.
+    """
     values = []
     for seed in seeds:
-        path = baseline_run_dir(run_root, task, num_demos, seed) / "eval" / "val_final.json"
+        path = baseline_run_dir(run_root, task, num_demos, seed) / "eval" / val_result_name(max_episode_steps)
         if not path.is_file():
             return None
-        values.append(float(json.loads(path.read_text(encoding="utf-8"))["summary"]["success_once"]))
+        result = json.loads(path.read_text(encoding="utf-8"))
+        recorded = result.get("max_episode_steps")
+        if max_episode_steps is not None and recorded is not None and int(recorded) != max_episode_steps:
+            raise ValueError(f"{path} was evaluated at {recorded} steps, not {max_episode_steps}")
+        values.append(float(result["summary"]["success_once"]))
     return values
 
 
 def select_baseline_cell(
-    n100: Sequence[float], n200: Sequence[float] | None, *, low: float, high: float
+    n100: Sequence[float], n200: Sequence[float] | None, *, low: float, high: float, allow_low_success: bool = True
 ) -> dict[str, Any]:
-    """Plan §1: N=100 if its mean is in [low, high), else N=200, else low-success mode."""
+    """Plan §1: N=100 if its mean is in [low, high), else N=200, else low-success mode.
+
+    Without ``allow_low_success`` the last case is an error: the replication
+    task is not run outside the band (plan §12.3).
+    """
     mean100 = statistics.fmean(n100)
     if mean100 >= high:
         raise ValueError(f"N=100 mean validation success {mean100:.3f} >= {high}: too few failures")
@@ -66,6 +85,11 @@ def select_baseline_cell(
         return {"num_demos": 200, "mode": "normal", "mean_val_success": mean200}
     if mean200 >= high:
         raise ValueError(f"N=200 mean validation success {mean200:.3f} >= {high}")
+    if not allow_low_success:
+        raise ValueError(
+            f"mean validation success N=100 {mean100:.3f}, N=200 {mean200:.3f}: neither is in [{low}, {high}); "
+            "low-success mode is disabled, so the study is not run on this task (plan §12.3)"
+        )
     best = (200, mean200) if mean200 > mean100 else (100, mean100)
     return {"num_demos": best[0], "mode": "low-success", "mean_val_success": best[1]}
 
@@ -112,6 +136,16 @@ def rollout_dir(lock: LockFile, seed: int) -> Path:
     task = lock.require("task", "select-cell")
     root = task.get("rollout_root")
     return rollout_dir_for(Path(entry["path"]), task["name"], seed, Path(root) if root else None)
+
+
+def study_horizon(lock: LockFile) -> int | None:
+    """``max_episode_steps`` of every closed-loop stage (plan §1, §13), locked by select-cell.
+
+    ``None`` (lock files written before the horizon was locked) keeps each
+    checkpoint's recorded horizon.
+    """
+    value = lock.require("task", "select-cell").get("max_episode_steps")
+    return None if value is None else int(value)
 
 
 def dataset_dir(lock: LockFile, seed: int) -> Path:

@@ -1,0 +1,194 @@
+# Failure-aware study lock file (docs/failure_aware_finetuning_plan.md §12).
+# Written stage by stage by scripts/failure_study.py; sections are never edited
+# after the stage that fills them. Commit it before the test evaluation.
+
+[task]
+name = "placesphere"
+num_demos = 100
+mode = "normal"
+mean_val_success = 0.372
+val_seeds = [1, 2, 3, 4, 5]
+val_success_n100 = [0.36, 0.36, 0.38, 0.38, 0.38]
+val_success_n200 = [0.84, 0.84, 0.9, 0.6, 0.84]
+max_episode_steps = 200
+val_results = "val_final_h200.json"
+low_success_allowed = true
+protocol_sha256 = "6aafdc24a5e96386fc0c831d00cad113c0e9c5600379c537ba285358c3240663"
+rollout_root = "/userhome/cs5/u3684139/dp-runs-placesphere"
+recorded_utc = "2026-10-03T06:05:48+00:00"
+
+[checkpoints]
+recorded_utc = "2026-10-03T06:05:48+00:00"
+
+[checkpoints.s1]
+path = "/userhome/cs5/u3684139/dp-runs-placesphere/placesphere_rgb_unet_n100_s1/checkpoints/final.pt"
+sha256 = "d00fb43cedec84d02b4f55a853e350cf4b5f02d5df76dc79876e836bea6e8989"
+
+[checkpoints.s2]
+path = "/userhome/cs5/u3684139/dp-runs-placesphere/placesphere_rgb_unet_n100_s2/checkpoints/final.pt"
+sha256 = "3efea66ab1eb665cb06adf32ae0ac0acb5b9ebefa8c73d00b01e177f1139dea8"
+
+[checkpoints.s3]
+path = "/userhome/cs5/u3684139/dp-runs-placesphere/placesphere_rgb_unet_n100_s3/checkpoints/final.pt"
+sha256 = "178ca05fb27db67afb2dcdc342b5793267b540b8f2c7fa24063ce38318170c6b"
+
+[collection.s1]
+train_rollouts = 488
+train_successes = 150
+train_failures = 338
+dataset_size = 150
+l_fail = 184
+low_success = false
+failure_fraction_truncated = 0.07999999999999996
+summary_sha256 = "b816a9498c3bdd9ea446e3c2ffa66635f620fed6fc7e331cac378d69050583de"
+recorded_utc = "2026-10-03T06:44:14+00:00"
+
+[collection.s2]
+train_rollouts = 460
+train_successes = 150
+train_failures = 310
+dataset_size = 150
+l_fail = 184
+low_success = false
+failure_fraction_truncated = 0.07999999999999996
+summary_sha256 = "24df350ba670f378922692c644b54aa8814e02e3b24404368638d9594931c176"
+recorded_utc = "2026-10-03T14:05:26+00:00"
+
+[collection.s3]
+train_rollouts = 444
+train_successes = 150
+train_failures = 294
+dataset_size = 150
+l_fail = 184
+low_success = false
+failure_fraction_truncated = 0.07999999999999996
+summary_sha256 = "9bd9b946d767a53ec3afa7385936c7eede784c225f7523e7f8a2c2011ced76c6"
+recorded_utc = "2026-10-03T14:40:21+00:00"
+
+[finetune]
+lr = 1e-05
+steps = 5000
+source = "pilot"
+pilot_seed = 1
+pilot_checkpoint = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s1/failure_model_lr1e-05_it20000/checkpoints/step_005000.pt"
+pilot_checkpoint_sha256 = "03aba157fee8489ccf6404a59c9f8bee5d872fc536727b611ebe15701e879e41"
+pilot_success_reference = "success_pilot"
+candidate_lr = [1e-05, 1e-05, 1e-05, 0.0001, 0.0001, 0.0001]
+candidate_steps = [5000, 10000, 20000, 5000, 10000, 20000]
+candidate_margin = [0.05453293968828009, 0.05430170798381685, 0.05335371380174294, 0.05437206132356627, 0.05435923741183805, 0.05383464356910933]
+candidate_gap_fail = [0.05447759932937516, 0.05463308229643817, 0.05354186610163034, 0.054895364620054, 0.05463577405133492, 0.05315301018593221]
+candidate_gap_succ = [-5.534035890492842e-05, 0.00033137431262131745, 0.0001881522998873949, 0.0005233032964877312, 0.00027653663949687296, -0.0006816333831771264]
+recorded_utc = "2026-10-03T15:14:06+00:00"
+
+[models.s1]
+failure = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s1/failure_model_lr1e-05_it20000/checkpoints/step_005000.pt"
+failure_sha256 = "03aba157fee8489ccf6404a59c9f8bee5d872fc536727b611ebe15701e879e41"
+success = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s1/success_model_lr1e-05_it5000/checkpoints/final.pt"
+success_sha256 = "67c8ad22a3a0132d30b7016dc82f241d1e9b954e23ceb3907950ed6caeed8b9f"
+recorded_utc = "2026-10-03T15:18:18+00:00"
+
+[models.s2]
+failure = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s2/failure_model_lr1e-05_it5000/checkpoints/final.pt"
+failure_sha256 = "53db527b4f1ab96ea5877c24af3789c6569a6e0e05e62d26bc194182eb98863d"
+success = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s2/success_model_lr1e-05_it5000/checkpoints/final.pt"
+success_sha256 = "d279e1f4146d48518911093fa2af59d9403ae1e662767ac0552386067a0be454"
+recorded_utc = "2026-10-03T15:26:45+00:00"
+
+[models.s3]
+failure = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s3/failure_model_lr1e-05_it5000/checkpoints/final.pt"
+failure_sha256 = "a81d7f9265991a19886a81850d53446245eedf8f1353b46055fdd099c0715f1a"
+success = "/userhome/cs5/u3684139/dp-runs-placesphere/failure_aware/placesphere/s3/success_model_lr1e-05_it5000/checkpoints/final.pt"
+success_sha256 = "4cce6aa3a03b5b385e187400a131b675ad3a292cee856646ddd76e4df3c88c04"
+recorded_utc = "2026-10-03T15:35:31+00:00"
+
+[gate]
+passed = true
+recorded_utc = "2026-10-03T15:36:33+00:00"
+
+[gate.s1]
+base_failure = 0.06190242125961484
+model_failure = 0.006909929358421916
+base_success = 0.005354599172124823
+model_success = 0.0063252894660379266
+gap_fail = 0.05499249190119293
+gap_succ = -0.0009706902939131037
+margin = 0.055963182195106036
+passed = true
+success_reference = "success_gate"
+success_model_base_failure = 0.06190242125961484
+success_model_model_failure = 0.01857510038921053
+success_model_base_success = 0.005354599172124823
+success_model_model_success = 0.003073458472909537
+success_model_gap_fail = 0.043327320870404314
+success_model_gap_succ = 0.002281140699215286
+success_model_margin = 0.04104618017118903
+
+[gate.s2]
+base_failure = 0.06624174746335577
+model_failure = 0.007237439597191045
+base_success = 0.016148511527095732
+model_success = 0.0106351839591089
+gap_fail = 0.05900430786616473
+gap_succ = 0.005513327567986833
+margin = 0.05349098029817789
+passed = true
+success_reference = "success_gate"
+success_model_base_failure = 0.06624174746335577
+success_model_model_failure = 0.01933417878050043
+success_model_base_success = 0.016148511527095732
+success_model_model_success = 0.007757318952233016
+success_model_gap_fail = 0.046907568682855345
+success_model_gap_succ = 0.008391192574862715
+success_model_margin = 0.038516376107992634
+
+[gate.s3]
+base_failure = 0.04747859070603094
+model_failure = 0.005977372259856539
+base_success = 0.00970160845622775
+model_success = 0.007517641679280334
+gap_fail = 0.0415012184461744
+gap_succ = 0.002183966776947417
+margin = 0.039317251669226984
+passed = true
+success_reference = "success_gate"
+success_model_base_failure = 0.04747859070603094
+success_model_model_failure = 0.019677871992335776
+success_model_base_success = 0.00970160845622775
+success_model_model_success = 0.006803335979699143
+success_model_gap_fail = 0.027800718713695168
+success_model_gap_succ = 0.0028982724765286077
+success_model_margin = 0.02490244623716656
+
+[guidance.dry_run]
+seed = 1
+episodes = 8
+seed_range = [22000, 22008]
+max_episode_steps = 200
+m = 0.0028837169289588904
+mean_cosine = 0.9942325661420822
+alpha0_reproduces_baseline = true
+recorded_utc = "2026-10-03T15:38:09+00:00"
+
+[guidance.selection]
+guidance_arm = "F"
+grid = [0.5, 1.0, 2.0]
+grid_value_F = 0.5
+alpha_F = 0.5
+successes_F = 34
+at_grid_edge_F = true
+pooled_F = [34, 34, 35]
+grid_value_A = 0.5
+alpha_A = 173.38733735579075
+successes_A = 28
+at_grid_edge_A = true
+pooled_A = [28, 16, 2]
+recorded_utc = "2026-10-03T17:16:32+00:00"
+
+[guidance.c1]
+grid_value = 0.5
+successes = 35
+at_grid_edge = true
+mode = "fixed"
+alpha = 0.5
+pooled = [35, 32, 32]
+recorded_utc = "2026-10-03T18:06:03+00:00"

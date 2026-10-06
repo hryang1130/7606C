@@ -1,0 +1,3 @@
+# Compatibility entry point. New commands should use tasks/placesphere.toml.
+[legacy]
+task_config = "tasks/placesphere.toml"

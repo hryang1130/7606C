@@ -1,4 +1,4 @@
-"""RGB ManiSkill evaluation environments matching ``maniskill-demogen``."""
+"""ManiSkill evaluation environments matching the selected demo observations."""
 
 from __future__ import annotations
 
@@ -23,21 +23,22 @@ def ensure_render_icd() -> None:
 
 def environment_kwargs(cfg: Config, render_backend: str | None = None) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
-        "obs_mode": "rgb",
+        "obs_mode": cfg.task.obs_mode,
         "control_mode": cfg.task.control_mode,
         "reward_mode": "sparse",
         "sim_backend": cfg.task.sim_backend,
         "max_episode_steps": cfg.task.max_episode_steps,
         "reconfiguration_freq": 1,
-        "sensor_configs": {"shader_pack": cfg.task.shader_pack},
     }
+    if cfg.task.obs_mode == "rgb":
+        kwargs["sensor_configs"] = {"shader_pack": cfg.task.shader_pack}
     if render_backend is not None:
         kwargs["render_backend"] = render_backend
     return kwargs
 
 
 def make_eval_envs(cfg: Config, num_envs: int, render_backend: str | None = None):
-    """Create process-vectorized CPU-physics RGB environments.
+    """Create process-vectorized CPU-physics RGB or complete-state environments.
 
     Physics stays on ``physx_cpu`` because the demonstrations were generated
     there and ManiSkill's CPU/GPU backends do not produce identical initial
@@ -45,7 +46,8 @@ def make_eval_envs(cfg: Config, num_envs: int, render_backend: str | None = None
     """
     if cfg.task.sim_backend != "physx_cpu":
         raise ValueError("fair evaluation requires physx_cpu, matching the generated data")
-    ensure_render_icd()
+    if cfg.task.obs_mode == "rgb":
+        ensure_render_icd()
     # Imported here so environment_kwargs (rollout provenance) needs no gymnasium.
     import gymnasium as gym
     import mani_skill.envs  # noqa: F401  registers environment IDs
@@ -55,7 +57,8 @@ def make_eval_envs(cfg: Config, num_envs: int, render_backend: str | None = None
     def make():
         def thunk():
             env = gym.make(cfg.task.env_id, **environment_kwargs(cfg, render_backend))
-            env = FlattenRGBDObservationWrapper(env, rgb=True, depth=False, state=True)
+            if cfg.task.obs_mode == "rgb":
+                env = FlattenRGBDObservationWrapper(env, rgb=True, depth=False, state=True)
             return CPUGymWrapper(env, ignore_terminations=True, record_metrics=True)
 
         return thunk

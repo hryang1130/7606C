@@ -23,11 +23,15 @@
 #   sbatch --export=ALL,TASK=peginsertionside,EXPERIMENT=configs/experiments/smoke.toml,DATA_ROOT=...,RUN_ROOT=... \
 #     slurm/train_dual_gpu.sbatch --set train.total_iters=200 \
 #     --set train.validation_steps=[200] --set train.checkpoint_steps=[200]
+#
+# --time is the default debug partition's MaxTime (18 h); a longer request
+# stays pending with PartitionTimeLimit. A grid that needs longer is not
+# lost: USR1 at walltime - 120 s checkpoints the runs and the job requeues.
 #SBATCH --job-name=dp-rgb-train-dual
 #SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=48:00:00
+#SBATCH --time=18:00:00
 #SBATCH --signal=B:USR1@120
 #SBATCH --requeue
 #SBATCH --output=slurm-%x-%A.out

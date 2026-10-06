@@ -1,0 +1,56 @@
+# Takeover-correction fine-tuning study (PlaceSphere, N100 baselines s1-s3).
+# Written before any correction data was collected; starts only if the v2
+# probe (configs/failure_aware/takeover_probe_v2.toml) passes. Every output
+# records this file's sha256; selections, evaluations and the decision are
+# write-once. docs/failure-expert-takeover-probe.zh-CN.md §8 explains it.
+
+[source]
+lock = "configs/failure_aware/placesphere.toml"
+checkpoints = ["s1", "s2", "s3"]
+# Trigger, regrasp expert and place expert exactly as frozen for the v2 probe.
+probe_config = "configs/failure_aware/takeover_probe_v2.toml"
+probe_config_sha256 = "86b0f2fbee4c35d5af262f1634147afe7d9d2f659adead14a2330f59ea4b3b7d"
+max_episode_steps = 200
+inference_seed = 0  # per-episode generator seed = inference_seed + reset seed
+
+[collection]
+# Same seed range for every checkpoint (each uses its own rollouts), disjoint
+# from all earlier studies, the probes (40000-40129, 40900-40949) and evaluation.
+seeds = [41000, 41600]
+# Stop after this many successful expert corrections per checkpoint. Every
+# attempt (no trigger, expert failure) is recorded; only expert successes train.
+target_corrections = 100
+
+[data]
+# The baselines' own demonstration files; base demos are the first 100 by seed
+# (exactly the N=100 training set), arm D adds the next ones in seed order
+# until its trainable windows reach arm C's correction windows.
+root = "/userhome/cs5/u3684139/maniskill-demogen/data/dataset"
+train_path = "train/PlaceSphere-v1/motionplanning/trajectory.state.pd_ee_delta_pos.physx_cpu.h5"
+val_path = "val/PlaceSphere-v1/motionplanning/trajectory.state.pd_ee_delta_pos.physx_cpu.h5"
+base_demos = 100
+val_demos = 50
+
+[finetune]
+# Identical for arms C (base demos + corrections) and D (base demos + matched
+# extra demos): start from the baseline final.pt, all parameters trainable,
+# baseline normalisation, constant lr after warmup, baseline batch size and EMA.
+lr = 3e-5
+steps = 10000
+warmup_steps = 500
+frozen_modules = []
+
+[evaluation]
+# Fresh seeds, 200 episodes per (checkpoint, arm), each arm on the same seeds,
+# horizon 200, num_envs and inference seed from each baseline's recorded [eval].
+seeds = [43000, 43200]
+
+[analysis]
+bootstrap_samples = 10000
+bootstrap_seed = 0
+# Two-level paired bootstrap: resample checkpoints, then evaluation seeds within
+# each; report the mean success difference and its 95% interval.
+# Primary: C - B. Key control: C - D. Claims:
+#   "corrections help"                 : C - B interval above 0
+#   "beyond the same amount of demos"  : additionally C - D interval above 0
+#   otherwise report the point estimates and intervals as not distinguishable.

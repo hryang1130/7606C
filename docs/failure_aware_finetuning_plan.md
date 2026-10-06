@@ -1,10 +1,20 @@
 # Failure-Aware Diffusion Policy Plan
 
 > Project: DASC7606C ManiSkill RGB Diffusion Policy  
-> Status: Implementation-ready working plan  
+> Status: Implementation-ready working plan; study task switched to PlaceSphere (2026-10-03), §13 code changes implemented  
 > Branch: `exp/failure-aware-dp`  
 > Primary idea: learn a separate failure action distribution from baseline-policy rollouts and use it as negative guidance during diffusion inference.  
 > Reference idea: *Failing Forward: Adaptive Failure-Informed Learning for Vision-Language-Action Models* (AFIL), arXiv:2605.08434.
+
+### Revision notes (2026-10-03): study task PegInsertionSide → PlaceSphere
+
+The method (§2, §5) and the protocol values (`configs/failure_aware/protocol.toml`: K, rollout cap, seed ranges, pilot grid, α grid, episode counts, budget cap) are unchanged. What changed:
+
+1. **Study task** (§1): PlaceSphere-v1 replaces PegInsertionSide-v1. The main-track PegInsertionSide baseline is at the floor in every variant tried (data size, backbone, vision pooling, control mode: mean `success_once` 0.000–0.008; `docs/experiment-progress.zh-CN.md` §9). Under the 2026-09-28 rule that would have meant low-success mode with fewer than 50 successes per checkpoint, i.e. C1/C2 dropped and H2 untestable, so the study could not answer its attribution question. No failure-aware stage had run on PegInsertionSide (no lock file exists), so no failure-aware result informed the switch.
+2. **Disclosure.** The switch was decided after the main-track PlaceSphere *test* results were known (§1). Those results are main-track results; the failure-aware study itself still selects its baseline cell from validation rollouts only, and its test evaluation is still run once per (arm, checkpoint) after everything is locked.
+3. **Episode horizon** (§1, §13): PlaceSphere is studied at `max_episode_steps = 200`, the horizon of the main-track results, not the 50 recorded in the existing checkpoints. The study applies a study-wide horizon override (§13).
+4. **Replication task** (§12): LiftPegUpright-v1 replaces PlugCharger-v1 as the planned second task, following `docs/final-plan.md` §1 (LiftPegUpright is the pre-registered fallback for PlugCharger). PlugCharger is no longer part of the study.
+5. **Budget** (§10): re-projected with the measured PegInsertionSide rollout cost scaled to 200-step episodes. The 24 GPU-hour cap is kept.
 
 ### Revision notes (2026-09-28)
 
@@ -20,7 +30,7 @@ The method (§2, §5.1–5.3) is unchanged. The experimental design was tightene
 
 ### Parameters locked (2026-09-28)
 
-All open parameters are fixed in **§11** before any failure-aware run. Main consequences: PegInsertionSide only, with a task-agnostic interface for a later PlugCharger extension (§1, §12); failure trajectories truncated at 1.5 × the median successful length (§3.3); fine-tuning lr/steps chosen by an offline-only pilot (§4.4); C3 dropped; total budget capped at **24 GPU-hours** (§10).
+All open parameters are fixed in **§11** before any failure-aware run. Main consequences: PlaceSphere only (PegInsertionSide until 2026-10-03), with a task-agnostic interface for a later LiftPegUpright replication (§1, §12); failure trajectories truncated at 1.5 × the median successful length (§3.3); fine-tuning lr/steps chosen by an offline-only pilot (§4.4); C3 dropped; total budget capped at **24 GPU-hours** (§10).
 
 ---
 
@@ -54,23 +64,31 @@ The success model learns the normal successful action distribution. The failure 
 - Keep the existing U-Net / noise-predictor architecture.
 - Reuse the trained baseline checkpoint.
 - Do not require frame-level failure-onset annotation.
-- Run the study on **PegInsertionSide only**; keep everything task-agnostic so PlugCharger can be added later (§12).
+- Run the study on **PlaceSphere only**; keep everything task-agnostic so LiftPegUpright can be added later (§12).
 - Keep baseline evaluation seeds untouched.
 - Avoid unrelated refactors in this branch.
 
 ### Task (fixed)
 
-The study runs on **PegInsertionSide-v1 (task 5)**: `pd_joint_pos`, 8-dim actions, 300-step episodes. Nothing in the code or protocol may be specific to this task; PlugCharger-v1 (task 6) is the planned extension and must only need a new per-task lock file (§12).
+The study runs on **PlaceSphere-v1**: `pd_ee_delta_pos`, 4-dim actions, one 128×128 RGB camera, **200-step episodes**. Nothing in the code or protocol may be specific to this task; LiftPegUpright-v1 is the planned replication and must only need a new per-task lock file (§12).
 
-**Baseline cell rule.** Read the main-track **validation-rollout** results only (`success_once`, seeds 5000–5049, `final.pt`, mean over training seeds 1–5); never test results.
+**Why PlaceSphere, and why not PegInsertionSide.** The study needs a baseline that both succeeds and fails often enough to collect K = 150 episodes of each class, so that the success-rollout controls C1/C2 exist and H2 can be tested (see "Why a floor" below). PegInsertionSide does not meet this: its main-track baseline is ≈ 0 in every variant run (best cell: N = 200, mean validation `success_once` 0.008; `docs/experiment-progress.zh-CN.md` §9). PlaceSphere is a mid-success task in the main track (test `success_once` 0.36 at N = 100 and 0.77 at N = 200, horizon 200). The PegInsertionSide results stay in the report as a negative result for the main track. They are not evidence about failure guidance, which was never run on them.
 
-1. Use the `UNet · N = 100` cell if its mean validation success is **≥ 0.15**.
-2. Otherwise use the track-A `UNet · N = 200` cell if its mean is ≥ 0.15. This mirrors the main project's rule for hard tasks in track B (`docs/final-plan.md` §6).
+The switch was made after the main-track PlaceSphere test results were seen. This is acceptable because the study does not reuse them for any choice: the baseline cell below is chosen from validation rollouts, and every study-specific choice (lr/steps, α, F vs A) uses the reserved seed ranges of §3.5. The report states the order of events.
+
+**Episode horizon.** PlaceSphere demonstrations are 90–150 steps long (median 113). The task config and the existing checkpoints record ManiSkill's registered default of 50 steps, which truncates every episode before success; the main-track results were evaluated with `--max-episode-steps 200` (`eval/*_final_h200.json`). Every closed-loop stage of this study (collection, dry run, tuning, test, and the validation results read by the cell rule) runs at **200 steps**, recorded as `[task] max_episode_steps` in the lock file. The pipeline applies this horizon instead of the checkpoint's recorded value (§13); running at 50 would label every episode a failure.
+
+**Baseline cell rule.** Read the main-track **validation-rollout** results only (`success_once`, seeds 5000–5049, `final.pt`, horizon 200, mean over training seeds 1–5); never test results. A cell is usable in normal mode if its mean lies in **[0.15, 0.85)** (`[baseline_cell]` in `protocol.toml`); the upper bound guarantees enough failures.
+
+1. Use the `UNet · N = 100` cell if its mean validation success is in [0.15, 0.85).
+2. Otherwise use the track-A `UNet · N = 200` cell if its mean is in [0.15, 0.85). This mirrors the main project's rule for hard tasks in track B (`docs/final-plan.md` §6).
 3. Otherwise use whichever of the two cells has the higher mean, and run in **low-success mode**:
    - collection keeps the 600-rollout cap; K is lowered to the number of successes found (§3.4);
    - if a checkpoint yields fewer than **50** successes, C1/C2 are not run for the whole study, H2 is reported as untestable, and the offline gate (§6.7) uses the expert validation demonstrations (seeds 4000–4049) in place of held-out successful rollouts.
 
 Why a floor: near 0 % success, "failure" is the policy's whole action distribution, guidance has nothing to contrast against, and the success-rollout control cannot be trained. The rule is written down before any failure-aware run and only reads baseline-track results, so it cannot favor the method.
+
+If N = 100 is at or above 0.85, or N = 100 is below 0.15 and N = 200 is at or above 0.85, `select-cell` stops with an error instead of choosing; the task is then outside the study's design and this section must be revised before anything else runs. For PlaceSphere the main-track test means (0.36 at N = 100, 0.77 at N = 200) suggest rule 1 applies, but only the validation results decide. Those validation results do not exist yet at horizon 200 and are a prerequisite (§11).
 
 ---
 
@@ -232,6 +250,8 @@ L_fail = min(max_episode_steps, ceil_to_multiple_of_8(1.5 × median(L_succ)))
 
 where `L_succ` are the stored lengths of the K success-train episodes of the **same checkpoint**. The same `L_fail` is applied to that checkpoint's holdout failures (§6.7). `L_fail`, and the fraction of failure steps discarded by it, are recorded in the dataset metadata.
 
+For orientation only: if PlaceSphere's successful rollouts are about as long as its demonstrations (median 113), `L_fail ≈ 176` of the 200 steps. The value is always derived from the collected successes, never set from this estimate.
+
 ### 3.4 Collection budget and fixed dataset size
 
 Per task **and per baseline checkpoint** (§4.1):
@@ -243,7 +263,7 @@ Failure-train size K:          first K failures in seed order, K = 150
 Success-train size K:          first K successes in seed order, same K
 ```
 
-The dataset **size** is fixed, not the rollout count: every checkpoint's failure model and success-control model is trained on exactly K episodes, taken as a seed-ordered prefix (the same rule `dp-manip` already uses for the N-demo subsets). Rollouts proceed in blocks of `num_envs` and stop as soon as both classes have K episodes; with a baseline success rate `p` this needs about `K / min(p, 1 − p)` rollouts (300 at `p = 0.5`, 600 at `p = 0.25`). If the 600-rollout cap is reached before both classes have K episodes, K for that checkpoint is lowered to the smaller class count and the deviation is reported; the collection is not extended. Record the actual rollout count.
+The dataset **size** is fixed, not the rollout count: every checkpoint's failure model and success-control model is trained on exactly K episodes, taken as a seed-ordered prefix (the same rule `dp-manip` already uses for the N-demo subsets). Rollouts proceed in blocks of `num_envs` and stop as soon as both classes have K episodes; with a baseline success rate `p` this needs about `K / min(p, 1 − p)` rollouts (300 at `p = 0.5`, 600 at `p = 0.25`; about 420 for PlaceSphere's N = 100 cell if `p ≈ 0.36` holds on the collection seeds). If the 600-rollout cap is reached before both classes have K episodes, K for that checkpoint is lowered to the smaller class count and the deviation is reported; the collection is not extended. Record the actual rollout count.
 
 Perturbations (wider initialization, camera or action noise) are **not** part of the default design: the §1 band guarantees enough failures without them, and perturbed failures would come from a different state distribution than the test set. If they ever become necessary, they must be declared before collection and applied identically to the failure and success datasets.
 
@@ -316,7 +336,7 @@ The failure policy must start from the **same baseline checkpoint** used to coll
 failure_policy <- baseline checkpoint
 ```
 
-**Multiple checkpoints.** Failures are on-policy, so they are specific to one checkpoint. Run the whole pipeline (collect → fine-tune → tune α → test) independently for the baseline checkpoints of **training seeds 1, 2, 3** (`peginsertionside_unet_n<N>_s{1,2,3}/final.pt`, with `N` from the §1 baseline cell rule). Every comparison in §6 is then paired *within* a checkpoint, which cancels most of the between-seed variance (σ ≈ 0.12 at N = 100 in the pilot) that dominates the main-track comparisons; what remains is the variance of the treatment effect itself. Seeds 4–5 are an optional extension if compute allows; the seed count is fixed before any test evaluation.
+**Multiple checkpoints.** Failures are on-policy, so they are specific to one checkpoint. Run the whole pipeline (collect → fine-tune → tune α → test) independently for the baseline checkpoints of **training seeds 1, 2, 3** (`placesphere_rgb_unet_n<N>_s{1,2,3}/checkpoints/final.pt`, with `N` from the §1 baseline cell rule). Every comparison in §6 is then paired *within* a checkpoint, which cancels the between-seed variance (PlaceSphere test σ ≈ 0.04 at N = 100 and 0.06 at N = 200, sample std over 5 seeds) that affects the main-track comparisons; what remains is the variance of the treatment effect itself. Seeds 4–5 are an optional extension if compute allows; the seed count is fixed before any test evaluation.
 
 The first implementation should then:
 
@@ -567,7 +587,7 @@ where `m` is the mean of `(1 − c_k)/2` over all denoising steps, measured in a
 2. Pick the α with the highest pooled `success_once`; ties within 2 episodes go to the **smaller** α. If the winner is at the edge of the grid, report that; the grid is not extended.
 3. The same selected α is used for all checkpoints of that arm.
 4. F vs A: the arm whose selected α has the higher pooled tuning success becomes "the guidance arm" for H1/H2 and fixes C1's guidance mode; ties go to F (the simpler one).
-5. For the later PlugCharger extension, how α is transferred or re-tuned is defined in §12.
+5. LiftPegUpright runs its own selection with the same rules (§12.3); nothing is transferred between tasks.
 
 Arm B is not run on the tuning set: selection only compares α values within an arm and F against A.
 
@@ -609,7 +629,7 @@ Only H1 is the primary claim. H2 decides how the result may be worded: if H1 hol
 All arms must use:
 
 - the same success-policy checkpoint within each pair;
-- the same environment configuration (`physx_cpu`, `num_envs`, `max_episode_steps` from `configs/tasks/`);
+- the same environment configuration (`physx_cpu`, `num_envs`, and the study horizon `max_episode_steps` from the lock file's `[task]`, 200 for PlaceSphere; §1, §13);
 - the same test seeds 10000–10099 and tuning seeds 22000–22047;
 - the same inference seed (0) and the same RNG consumption per step, so that arms differ only through the guided `ε` (checked by the `α = 0` test in §8);
 - the same observation history and action horizon.
@@ -715,7 +735,7 @@ dp-manip/
 │   └── failure_aware/
 │       ├── protocol.toml         # NEW (Phase 1): task-agnostic protocol (§12.1)
 │       ├── smoke_protocol.toml   # NEW: scaled-down protocol for the cluster smoke run
-│       └── peginsertionside.toml # NEW: per-task lock file (§12.2); plugcharger.toml later
+│       └── placesphere.toml      # NEW: per-task lock file (§12.2); liftpegupright.toml later
 │
 ├── tests/
 │   ├── test_failure_rollout.py   # NEW (Phase 1)
@@ -846,7 +866,7 @@ alpha = 0, same seeds, same num_envs, same inference seed
        identical to the plain baseline evaluate(...) output
 ```
 
-The `α = 0` reproduction is the strongest end-to-end check that guided and baseline arms consume the same randomness and conditioning; every later paired comparison relies on it. If it passes on the cluster, existing baseline test results for the same `final.pt`, code revision and inference seed may be reused as arm B.
+The `α = 0` reproduction is the strongest end-to-end check that guided and baseline arms consume the same randomness and conditioning; every later paired comparison relies on it. If it passes on the cluster, existing baseline test results for the same `final.pt`, code revision, inference seed and horizon could in principle be reused as arm B; the pipeline does not do this and always evaluates B itself (§13).
 
 ### Phase 4 — Experiment integration
 
@@ -870,9 +890,10 @@ Acceptance criteria:
 
 ### Phase 5 — Final study
 
-After the implementation is frozen:
+After the implementation is frozen (including the §13 changes):
 
-1. fix PegInsertionSide's baseline cell with the §1 rule and write the per-task lock file (§12.2);
+0. main track: evaluate PlaceSphere `unet_n100` and `unet_n200` seeds 1–5 on the validation split at horizon 200 (`eval_dp.py --split val --max-episode-steps 200`, writes `eval/val_final_h200.json`);
+1. fix PlaceSphere's baseline cell with the §1 rule and write the per-task lock file (§12.2);
 2. collect checkpoint 1's rollouts; measure GPU-hours per 100 episodes and re-project §10;
 3. run the offline lr/steps pilot on checkpoint 1 (§4.4);
 4. collect checkpoints 2–3; build failure/success datasets (K = 150, `L_fail` truncation);
@@ -883,12 +904,12 @@ After the implementation is frozen:
 9. freeze everything, run the test set once per (arm, checkpoint);
 10. report counts, paired bootstrap for H1–H3, latency, diagnostics, failure-type shift.
 
-**Runbook (implemented in Phases 1–4).** Every step is one job: `sbatch slurm/failure_aware.sbatch <script> <arguments>` (the QOS allows one job per user). `T=peginsertionside`, `CKPT_s` is checkpoint `s`'s `final.pt` as locked in `[checkpoints]`, `DIR_s` its rollout directory `<run root>/failure_aware/T/s<s>`:
+**Runbook (implemented in Phases 1–4; the horizon options are §13 changes).** Every step is one job: `sbatch slurm/failure_aware.sbatch <script> <arguments>` (the QOS allows one job per user). `T=placesphere`, the main-track run root is `~/dp-runs-placesphere`, `CKPT_s` is checkpoint `s`'s `final.pt` as locked in `[checkpoints]`, `DIR_s` its rollout directory `<run root>/failure_aware/T/s<s>`:
 
 | Step | Command | Locks |
 | --- | --- | --- |
-| 1 | `scripts/failure_study.py select-cell --task T --run-root <main-track run root>` | `[task]`, `[checkpoints]` |
-| 2, 4 | per checkpoint: `scripts/collect_rollouts.py collect CKPT_s --split train`, `... --split holdout`, `... build DIR_s`, then `scripts/failure_study.py record-collection --task T --seed s` | `[collection.s<s>]` |
+| 1 | `scripts/failure_study.py select-cell --task T --run-root <main-track run root> --max-episode-steps 200` | `[task]` (incl. `max_episode_steps`), `[checkpoints]` |
+| 2, 4 | per checkpoint: `scripts/collect_rollouts.py collect CKPT_s --split train --max-episode-steps 200`, `... --split holdout --max-episode-steps 200`, `... build DIR_s`, then `scripts/failure_study.py record-collection --task T --seed s` | `[collection.s<s>]` |
 | 3 | `scripts/finetune_dp.py CKPT_1 --label failure --lr <lr> --steps 20000 --checkpoint-steps 5000 10000` for each pilot lr, then `scripts/failure_study.py pilot --task T` | `[finetune]` |
 | 5 | `scripts/finetune_dp.py CKPT_s --label failure\|success --lr <locked lr> --steps <locked steps>` for the remaining models, then `record-models --task T --seed s` | `[models.s<s>]` |
 | 6 | `scripts/failure_study.py gate --task T` | `[gate]` |
@@ -900,7 +921,7 @@ After the implementation is frozen:
 
 **Driver and smoke run.** `scripts/failure_pipeline.py` runs every unfinished row of this table in order, inside one job, and stops at the points that need a person: after checkpoint 1's collection it prints the measured rollout cost and the projected total and pauses for the §10.3 budget decision (continue with `--budget-confirmed`); a failed gate ends the study; before the test split it pauses so the lock file is committed first (continue with `--include-test`). Resubmitting the same command continues from the lock file, including after a preemption (exit 75, requeued by `slurm/failure_aware.sbatch`).
 
-Before the study, the same driver runs a **cluster smoke** with `configs/failure_aware/smoke_protocol.toml` (one checkpoint, K = 4, 100/200-step fine-tunes, 4 tuning and 8 test episodes), a scratch `--lock` and a scratch `--rollout-root`. It exercises every stage on real ManiSkill, including the `α = 0` bit-exact check, and is expected to take well under one GPU-hour (not yet measured); its results are discarded. The driver refuses a non-study protocol without its own `--lock` and its own `--rollout-root` (not the run root), and the lock records the rollout root, so the smoke cannot touch the study's lock file or rollout directories. `[evaluation] test_episodes` (100 in the study protocol) is the number of leading test seeds used per (arm, checkpoint).
+Before the study, the same driver runs a **cluster smoke** on `--task placesphere` with `configs/failure_aware/smoke_protocol.toml` (one checkpoint, K = 4, 100/200-step fine-tunes, 4 tuning and 8 test episodes), a scratch `--lock` and a scratch `--rollout-root`. It exercises every stage on real ManiSkill, including the `α = 0` bit-exact check, and is expected to take well under one GPU-hour (not yet measured); its results are discarded. The driver refuses a non-study protocol without its own `--lock` and its own `--rollout-root` (not the run root), and the lock records the rollout root, so the smoke cannot touch the study's lock file or rollout directories. `[evaluation] test_episodes` (100 in the study protocol) is the number of leading test seeds used per (arm, checkpoint).
 
 ---
 
@@ -944,32 +965,34 @@ The implementation is intentionally conservative: the original successful policy
 
 ## 10. Evaluation and Training Budget
 
-**Cap: 24 GPU-hours in total** for the PegInsertionSide study (3 checkpoints). The PlugCharger extension is budgeted separately (§12.4). One GPU-hour = one GPU allocated for one hour of wall time, including rollouts whose time is mostly CPU physics and rendering.
+**Cap: 24 GPU-hours in total** for the PlaceSphere study (3 checkpoints). The LiftPegUpright replication is budgeted separately (§12.4). One GPU-hour = one GPU allocated for one hour of wall time, including rollouts whose time is mostly CPU physics and rendering.
 
 ### 10.1 Unit costs
 
 | Unit | GPU-hours | Source |
 | --- | ---: | --- |
 | 10k fine-tuning steps (batch 64) | 0.4 | **measured** speed: UNet smoke on RTX 4080 SUPER, 0.13 s/step (`../4080_test_results.md`), plus ~5 min overhead; freezing the encoder can only make it faster |
-| 100 baseline episodes | 0.25 | **estimate, not measured** (PegInsertionSide length 300, DDPM 100 steps, `num_envs = 4`) |
-| 100 guided episodes | 0.40 | estimate: shared encoder + two noise predictors ≈ 1.6× baseline |
+| 100 baseline episodes | 0.11 | **derived**: measured 0.16 GPU-h per 100 PegInsertionSide episodes at 300 steps, `num_envs = 4` (`docs/experiment-progress.zh-CN.md` §9.5), scaled to 200 steps; assumes every episode runs the full horizon |
+| 100 guided episodes | 0.17 | estimate: shared encoder + two noise predictors ≈ 1.6× baseline |
 
-Everything below assumes the worst-case episode length (PegInsertionSide, 300 steps); shorter tasks (100–200 steps) cost proportionally less. The rollout unit costs are the largest uncertainty and are **re-measured on checkpoint 1's collection** (§8 Phase 5, step 2) before anything else is committed.
+Until 2026-10-03 this section used the unmeasured 0.25 / 0.40 at 300 steps (PegInsertionSide). The PlaceSphere costs above are still derived, not measured on PlaceSphere: they are **re-measured on checkpoint 1's collection** (§8 Phase 5, step 2) before anything else is committed.
 
 ### 10.2 Plan
 
 | Stage | Episodes (guided) | Typical GPU-h | Worst GPU-h | Notes |
 | --- | ---: | ---: | ---: | --- |
-| Collection, 3 checkpoints | 1,500 (0) – 2,100 (0) | 3.8 | 5.3 | train until both classes reach K (300–600) + 100 holdout |
+| Collection, 3 checkpoints | 1,560 (0) – 2,100 (0) | 1.7 | 2.3 | train until both classes reach K (≈ 420 at `p ≈ 0.36`; cap 600) + 100 holdout |
 | lr/steps pilot (checkpoint 1) | — | 1.6 | 1.6 | 2 runs × 20k steps; the chosen one is reused as checkpoint 1's failure model |
 | Remaining fine-tunes | — | 2.0 | 4.0 | 5 runs (ckpt 1 success; ckpt 2–3 failure + success) at 10k or 20k steps |
 | `α = 0` reproduction check | 8 (8) | 0.05 | 0.05 | same episodes as the dry run, plus 8 baseline episodes |
 | Dry run for `m` | 8 (8) | 0.05 | 0.05 | checkpoint 1 |
-| Tuning: F, A, C1 × 3 α × 48 eps × 3 ckpts | 1,296 (1,296) | 5.2 | 5.2 | §5.5 |
-| Test: F, A, C1 × 3 ckpts × 100 | 900 (900) | 3.6 | 3.6 | |
-| Test: C2 × 3 ckpts × 100 | 300 (0) | 0.75 | 0.75 | |
-| Test: B × 3 ckpts × 100 | 300 (0) | 0 | 0.75 | reused from the main track if the `α = 0` check passes; otherwise rerun |
-| **Total** | | **≈ 17.1** | **≈ 21.4** | reserve 2.6–6.9 GPU-h for failed or preempted jobs |
+| Tuning: F, A, C1 × 3 α × 48 eps × 3 ckpts | 1,296 (1,296) | 2.2 | 2.2 | §5.5 |
+| Test: F, A, C1 × 3 ckpts × 100 | 900 (900) | 1.5 | 1.5 | |
+| Test: C2 × 3 ckpts × 100 | 300 (0) | 0.33 | 0.33 | |
+| Test: B × 3 ckpts × 100 | 300 (0) | 0.33 | 0.33 | always run by the study (`eval --arm B`) at the locked horizon; main-track results are not reused |
+| **Total** | | **≈ 9.7** | **≈ 12.4** | reserve 11.6–14.3 GPU-h for failed or preempted jobs |
+
+Fine-tuning is now the largest item. The headroom under the cap is not spent on extra arms, seeds or α values; the design is unchanged. It can absorb a higher-than-derived rollout cost.
 
 ### 10.3 If the re-projection exceeds 24 GPU-hours
 
@@ -984,7 +1007,7 @@ Never cut: the 3 checkpoints, 100 test episodes per (arm, checkpoint), and the a
 
 ---
 
-## 11. Locked Parameters (2026-09-28)
+## 11. Locked Parameters (2026-09-28, task revised 2026-10-03)
 
 Fixed before any failure-aware run. Changing any of them after tuning or test results exist invalidates the pre-registration; a change made before that is recorded here with its date and reason.
 
@@ -992,11 +1015,16 @@ Change log (all before any failure-aware run):
 
 - 2026-09-28 — guidance tuning 50 → **48** episodes per checkpoint and the `m` dry run 10 → **8** episodes. `evaluate` runs full waves of `eval.num_envs = 4` episodes; 50 and 10 are not multiples of 4. The machine-readable values live in `configs/failure_aware/protocol.toml`, and `FailureProtocol.check_against` rejects counts that do not divide `num_envs`.
 - 2026-09-30 — `protocol.toml` gained `[evaluation] test_episodes = 100`: the number of leading test seeds per (arm, checkpoint). 100 is the whole recorded test range (10000–10099), so the study's test set is unchanged; the field exists so the smoke protocol can use 8. This changes the protocol file's sha256, which is harmless because no lock file or rollout existed yet. Also: a non-study (smoke) protocol must use its own `--lock` and `--rollout-root`, and fine-tuning plus the offline losses preload their data (§4.5; speed only, no effect on results).
+- 2026-10-03 — **study task PegInsertionSide → PlaceSphere** (rows 1, 11, 12 and the Failure types / Prerequisite defaults). Reason and evidence: §1 and the 2026-10-03 revision notes. The main-track PegInsertionSide baseline is ≈ 0 in all variants, which would have forced low-success mode with C1/C2 dropped. No lock file, rollout or fine-tune existed for any task, so no failure-aware result informed the change. The switch was decided after the main-track PlaceSphere test results were known; the study's own choices still use only validation and reserved seeds. `protocol.toml` is unchanged.
+- 2026-10-03 — **study horizon** 200 steps for PlaceSphere (row 11): the checkpoints record 50, which truncates every episode before success (demonstrations median 113 steps). The main-track results use 200, so the study does too. Implemented by the §13 code changes.
+- 2026-10-03 — **replication task** PlugCharger → LiftPegUpright (§12), following the pre-registered fallback in `docs/final-plan.md` §1.
+- 2026-10-03 — **budget re-projected** for 200-step episodes from the measured PegInsertionSide rollout cost (§10): ≈ 9.7 typical / 12.4 worst GPU-h; cap stays 24. Arm B is always run by the study; the earlier "reuse from the main track" saving was never implemented.
+- 2026-10-03 — **LiftPegUpright runs the full design** (§12.3–12.5), independently of PlaceSphere; the reduced replication with transferred hyperparameters was never implemented and is dropped. Supporting changes: `select-cell --no-low-success` (the replication task stops outside the band), training refuses a horizon shorter than the longest demonstration, `configs/tasks/placesphere.toml` now records 200 steps, and `slurm/failure_aware.sbatch` requests the debug partition's 18 h MaxTime instead of 24 h.
 
 | # | Parameter | Value | Section |
 | --- | --- | --- | --- |
-| 1 | Task | PegInsertionSide-v1 only; PlugCharger via §12 later | §1 |
-| 2 | Baseline cell | N = 100 if mean val success ≥ 0.15, else N = 200 if ≥ 0.15, else higher of the two in low-success mode (C1/C2 dropped if < 50 successes) | §1 |
+| 1 | Task | PlaceSphere-v1 only (PegInsertionSide until 2026-10-03); LiftPegUpright via §12 later | §1 |
+| 2 | Baseline cell | N = 100 if mean val success (horizon 200) in [0.15, 0.85), else N = 200 if in [0.15, 0.85), else higher of the two in low-success mode (C1/C2 dropped if < 50 successes); a cell ≥ 0.85 stops the rule | §1 |
 | 3 | Baseline checkpoints | training seeds 1, 2, 3 of the chosen cell | §4.1 |
 | 4 | Failure truncation | `L_fail = min(max_steps, ceil8(1.5 × median success length))`, per checkpoint | §3.3 |
 | 5 | Dataset size K | 150 failures and 150 successes per checkpoint; rollout cap 600 | §3.4 |
@@ -1005,6 +1033,8 @@ Change log (all before any failure-aware run):
 | 8 | C3 | dropped | §6.1 |
 | 9 | α grid | fixed {0.5, 1, 2}; adaptive {0.5, 1, 2} / `m`; not extended | §5.5 |
 | 10 | Budget | ≤ 24 GPU-hours; cut order §10.3 | §10 |
+| 11 | Study horizon | `max_episode_steps = 200` for every closed-loop stage and for the validation results read by row 2; overrides the checkpoints' recorded 50 | §1, §13 |
+| 12 | Main-track checkpoints | `~/dp-runs-placesphere/placesphere_rgb_unet_n<N>_s{1,2,3}/checkpoints/final.pt` | §4.1 |
 
 Defaults (no discussion needed, listed so they are not changed silently):
 
@@ -1021,20 +1051,20 @@ Defaults (no discussion needed, listed so they are not changed silently):
 | α tie-break | within 2 pooled tuning episodes → smaller α |
 | Evaluation `num_envs` | 4 for every rollout (required by the `α = 0` check) |
 | Episodes | tuning 48 per checkpoint; test 100 per checkpoint (10000–10099) |
-| Failure types | automatic 3-way classification for all test episodes; PegInsertionSide stage subtypes from videos, 5 episodes per class per arm |
+| Failure types | automatic 3-way classification for all test episodes; PlaceSphere stage subtypes (not grasped / dropped in transit / released outside the bin / in the bin but not settled), from the env's `evaluate()` fields where available and checked on videos, 5 episodes per class per arm |
 | Offline gate | fixed noise/timestep seed, all windows of holdout 21050–21099; pass iff `gap_fail > gap_succ` on all 3 checkpoints |
-| Prerequisite | main-track PegInsertionSide `unet_n100` seeds 1–5 (and `unet_n200` if §1 falls back to it) `final.pt` and their validation rollouts are finished |
+| Prerequisite | main-track PlaceSphere `unet_n100` and `unet_n200` seeds 1–5 `final.pt` exist (done, 2026-10-03); their validation rollouts at horizon 200 (`eval/val_final_h200.json`) are finished (**not yet run**); the §13 code changes are on the branch (done, 2026-10-03) |
 
 ---
 
-## 12. Extension Interface: PlugCharger (task 6)
+## 12. Extension Interface: LiftPegUpright (replication task)
 
-No PlugCharger run is part of the current study. This section fixes what the PegInsertionSide implementation must look like so that PlugCharger (or any other task) can be added later by writing configuration only.
+LiftPegUpright is run by its task owner as a second, independent study (§12.3). This section fixes what the implementation must look like so that LiftPegUpright (or any other task) needs configuration only. Until 2026-10-03 the planned extension was PlugCharger-v1; it was replaced together with the main task (§11 change log). LiftPegUpright is the fallback for PlugCharger pre-registered in `docs/final-plan.md` §1, and it adds a skill PlaceSphere does not test: reorienting a grasped object.
 
 ### 12.1 Task-agnostic requirements (apply now)
 
 - **No task branches.** Every new script takes `--task <name>` and resolves `configs/tasks/<task>.toml`, like `scripts/run_experiment.py`; no `if task == ...` anywhere. Env id, control mode, `max_episode_steps`, cameras and action dimension come from the task config and the baseline checkpoint.
-- **Derived lengths come from data or config.** `L_fail` from the success lengths (§3.3), success truncation from `act_horizon`, episode length and Slurm time limits from `max_episode_steps`. Nothing hard-codes 300.
+- **Derived lengths come from data or config.** `L_fail` from the success lengths (§3.3), success truncation from `act_horizon`, episode length and Slurm time limits from the study horizon in the lock file (§13). Nothing hard-codes 300 or 200.
 - **Seed ranges are task-independent.** The ranges in §3.5 are the same numbers for every task.
 - **Output layout and run names include the task:**
 
@@ -1051,7 +1081,7 @@ No PlugCharger run is part of the current study. This section fixes what the Peg
   [task]                 # name, baseline cell N, mode (normal | low-success), val success per seed
   [checkpoints.s1]       # path, sha256 (one table per ckpt seed)
   [collection.s1]        # rollouts, successes, failures, K, L_fail, low_success, summary sha256
-  [finetune]             # lr, steps, source = "pilot" | "transferred:<task>", pilot candidates and margins
+  [finetune]             # lr, steps, source = "pilot", pilot candidates and margins
   [models.s1]            # failure / success model paths and sha256
   [gate]                 # passed; per ckpt seed: losses, gap_fail, gap_succ, pass
   [guidance.dry_run]     # m, mean cosine, alpha0_reproduces_baseline
@@ -1062,46 +1092,57 @@ No PlugCharger run is part of the current study. This section fixes what the Peg
   `dp_manip/failure_lock.py` writes each section once and refuses to replace it. GPU-hours are not locked (they grow); `failure_study.py status` sums them from the rollout, fine-tuning and evaluation records.
 
   Test results live in the evaluation JSON files, never in the lock file. Evaluation scripts read checkpoints, α and guidance mode **only** from the lock file (§8 Phase 4, criterion 3).
-- **Tests cover both tasks from the start.** Config-resolution and lock-file tests, and the synthetic-data dataset/rollout-schema tests, are parametrized over `peginsertionside` and `plugcharger`, so the PlugCharger path is exercised even though it is not run.
+- **Tests cover both tasks from the start.** The protocol tests and the synthetic-data end-to-end study run over `placesphere` and `liftpegupright`, so the LiftPegUpright path is exercised before it runs on the cluster.
 
-### 12.2 PegInsertionSide lock file
+### 12.2 PlaceSphere lock file
 
-`configs/failure_aware/peginsertionside.toml` is written during §8 Phase 5 by the runbook's commands: `[task]` and `[checkpoints]` in step 1, `[collection.*]` in steps 2 and 4, `[finetune]` in step 3, `[models.*]` in step 5, `[gate]` in step 6, `[guidance.*]` in steps 7–8. It is committed before the test evaluation (step 9).
+`configs/failure_aware/placesphere.toml` is written during §8 Phase 5 by the runbook's commands: `[task]` and `[checkpoints]` in step 1, `[collection.*]` in steps 2 and 4, `[finetune]` in step 3, `[models.*]` in step 5, `[gate]` in step 6, `[guidance.*]` in steps 7–8. It is committed before the test evaluation (step 9).
 
-### 12.3 What transfers to PlugCharger and what is re-derived
+### 12.3 LiftPegUpright design: the full protocol, run independently
 
-Default extension design: a **reduced replication with transferred hyperparameters**. It tests whether the method, tuned on PegInsertionSide, works on a second task without re-tuning, and it is the cheapest option.
+Decided 2026-10-03: LiftPegUpright runs the **full design**, the same protocol as PlaceSphere with every task-specific value re-derived on LiftPegUpright. Nothing is transferred from the PlaceSphere lock file, so the two studies do not depend on each other's order or outcome, and the existing pipeline runs it without code changes. (The earlier default, a reduced replication with transferred lr, steps and α, was never implemented and is dropped.)
 
-| Item | PlugCharger |
+| Item | LiftPegUpright |
 | --- | --- |
-| Baseline cell, low-success mode | re-derived with the §1 rule on PlugCharger's own validation results |
+| Study horizon | derived from LiftPegUpright's demonstration lengths before training (`docs/task-owner-runbook.zh-CN.md` §3); training refuses a horizon shorter than the longest demonstration. Locked by `select-cell --max-episode-steps` only if the trained checkpoints record a different value |
+| Baseline cell | the §1 rule on LiftPegUpright's own validation results at that horizon, with `select-cell --no-low-success`: if no cell is in [0.15, 0.85) the study stops (see below) |
 | Checkpoints | training seeds 1–3 of that cell |
-| K, rollout cap, truncation factor, seed ranges, episode counts | same as PegInsertionSide |
-| `L_fail` | re-derived from PlugCharger's own success lengths |
-| Fine-tune lr and steps | transferred from the PegInsertionSide lock file (no pilot) |
-| `m` | re-measured (8-episode success-blind dry run) |
-| Guidance arm (F or A) | transferred |
-| α | the selected grid value from `{0.5, 1, 2}` is transferred; the adaptive arm divides it by PlugCharger's own `m`; C1's grid value is transferred the same way |
-| Offline gate | re-run on PlugCharger's holdout |
-| Test arms | B, guidance arm, C1; C2 only if budget allows |
-| Hypotheses | H1 and H2, reported as a replication; H3 not tested |
+| Protocol values (K, rollout cap, truncation factor, seed ranges, pilot grid, α grid, episode counts) | `configs/failure_aware/protocol.toml`, same file as PlaceSphere |
+| `L_fail` | from LiftPegUpright's own success lengths |
+| Fine-tune lr and steps | LiftPegUpright's own offline pilot (§4.4) |
+| `m`, α, F vs A, C1's α | LiftPegUpright's own dry run and tuning sweep (§5.5) |
+| Offline gate | on LiftPegUpright's holdout (§6.7) |
+| Test arms and hypotheses | B, F, A, C1, C2; H1–H3 as in §6.2 |
 
-The alternative is the **full design** on PlugCharger (own pilot and α sweep, as in §4.4 and §5.5). Which of the two designs is used must be written into `configs/failure_aware/plugcharger.toml` before any PlugCharger collection starts.
+Each task's results are reported and tested separately; there is no pooling across tasks. If both tasks support H1 (and H2), the report may say the effect replicated; if only one does, it reports the split. The two tasks differ in control mode (`pd_ee_delta_pos`, 4-dim vs `pd_joint_pos`, 8-dim), which the report states when comparing them.
+
+If LiftPegUpright's baseline falls outside the §1 band (no normal-mode cell), the study is not run on it and the report says why; no other task is substituted. `--no-low-success` enforces this, so a near-zero baseline cannot fall into low-success mode.
 
 ### 12.4 Budget estimate
 
-PlugCharger episodes are 200 steps, so rollouts cost about 2/3 of PegInsertionSide's; fine-tuning costs the same. Unit costs are re-measured on the first PlugCharger collection, as in §10.
-
-| Design | Typical GPU-h | Worst GPU-h |
-| --- | ---: | ---: |
-| Reduced replication (default) | ≈ 6.8 | ≈ 10.7 |
-| Full design | ≈ 12.9 | ≈ 16.4 |
+The full design costs the same as PlaceSphere (§10.2): ≈ 9.7 typical / ≈ 12.4 worst GPU-hours at a 200-step horizon. Rollout rows scale linearly with the horizon once it is fixed; fine-tuning does not depend on it. It is charged to the LiftPegUpright owner's own quota and capped at 24 GPU-hours like the PlaceSphere study, with the same cut order (§10.3).
 
 ### 12.5 Prerequisites
 
-- The PegInsertionSide lock file is complete (it supplies the transferred values).
-- PlugCharger's main-track `unet_n100` seeds 1–5 (and `unet_n200` if the §1 rule falls back) are finished with validation rollouts.
-- A separate budget is approved; the extension does not draw on the 24 GPU-hours of §10.
+- LiftPegUpright's demonstrations are generated, its horizon is fixed in `configs/tasks/liftpegupright.toml`, and its main-track `unet_n100` and `unet_n200` seeds 1–5 are trained and evaluated on the validation split at that horizon.
+- A cluster smoke of the failure pipeline on LiftPegUpright (`smoke_protocol.toml`, §8) has passed, including the `α = 0` check.
+- The PlaceSphere study is **not** a prerequisite.
+
+## 13. Code Changes for the PlaceSphere Study (implemented 2026-10-03)
+
+The Phase 1–4 implementation was written against PegInsertionSide, whose task config and checkpoints carry the horizon the study uses (300). PlaceSphere's checkpoints record `max_episode_steps = 50`, and the study code took the horizon from the checkpoint (`from_recorded(checkpoint["config"])` in `scripts/collect_rollouts.py` and `scripts/failure_study.py::baseline_config`). Without the changes below every PlaceSphere rollout would stop at 50 steps and be labeled a failure. None of them changes the method or the protocol values. A lock file without `[task] max_episode_steps` (written before this change) keeps each checkpoint's recorded horizon.
+
+| # | Change | Where |
+| --- | --- | --- |
+| 1 | `select-cell --max-episode-steps H` writes `max_episode_steps = H` into the lock file's `[task]` and reads `eval/val_final_h<H>.json` instead of `eval/val_final.json`, rejecting a result that records another horizon. Without the option it locks the selected checkpoints' recorded horizon and reads `val_final.json` | `scripts/failure_study.py`, `dp_manip/failure_study.py::read_val_success` |
+| 2 | The dry run (`α = 0` check), tuning and test set `cfg.task.max_episode_steps` from the lock file after `from_recorded`, the same override `scripts/eval_dp.py --max-episode-steps` applies. Collection takes `collect --max-episode-steps H` (the pipeline passes the locked value), and `record-collection` refuses a dataset built at another horizon. Rollout provenance, the dry-run lock section and every evaluation JSON record the applied horizon and the checkpoint's recorded one | `scripts/collect_rollouts.py`, `scripts/failure_study.py` |
+| 3 | `failure_pipeline.py --max-episode-steps H` forwards H to `select-cell` and refuses a value that differs from the lock. Arm B is always evaluated by the study, never reused from main-track results, so it runs at the locked horizon like every arm | `scripts/failure_pipeline.py` |
+| 4 | Tests: the synthetic baselines record a 2-step horizon, in which no fake episode can succeed, while the study runs at 12; the end-to-end and pipeline tests pass only if every stage applies the lock's horizon, and they check the recorded horizons and the refusals. Multi-task protocol tests run over `placesphere` and `liftpegupright` (§12.1) | `tests/test_failure_*.py` |
+| 5 | Example commands in docstrings use `placesphere` and `--max-episode-steps 200` | `scripts/failure_pipeline.py`, `slurm/failure_aware.sbatch` |
+
+Outside this study, `configs/tasks/placesphere.toml` should get `max_episode_steps = 200` so that new main-track runs record the horizon they are evaluated at. That is a main-track change; it does not affect the existing checkpoints, so items 1–3 are needed either way.
+
+The cluster smoke (§8) is rerun on PlaceSphere after these changes; it must show collection episodes reaching steps beyond 50 and the `α = 0` check passing at horizon 200.
 
 ---
 
