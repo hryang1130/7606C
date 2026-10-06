@@ -10,7 +10,7 @@ PegInsertionSide、PlugCharger）上训练 **RGB-based Diffusion Policy**。**�
 | [maniskill-demogen](./maniskill-demogen) | **Demo Gen**：运动规划专家生成 RGB + state 示范（每任务训练 400 条、验证 50 条），一条命令生成一个任务，支持断点续跑与 Slurm 批处理 |
 | [dp-manip](./dp-manip) | **统一 pipeline**：训练与闭环评估。数据量轨道 N = 25 / 50 / 100 / 200（嵌套子集，未饱和时加 400）；backbone 轨道 UNet / Transformer / MLP。集群上以单作业双 GPU 动态队列运行 |
 | [VariDP](./VariDP) | 冻结的 donor：UNet / DP-T / MLP 三种主干已迁移进 `dp-manip/dp_manip/backbones/`，本目录只作实现对照（见 [VariDP/LEGACY.md](./VariDP/LEGACY.md)） |
-| [report](./report) | **实验报告与交接**：StackCube-v1 数据量轨道结果（[scaling 报告](./report/report_stackcube_scaling.md)）、N=100 B0 baseline 交付说明（[handoff](./report/handoff_lusen_n100.md)） |
+| [report](./report) | **实验报告与交接**：StackCube-v1 数据量轨道结果 **N = 25/50/100/200/400 全档已实测**（[scaling 报告](./report/report_stackcube_scaling.md)，v2 补入 N=400）、N=100 B0 baseline 交付说明（[handoff](./report/handoff_lusen_n100.md)） |
 
 - 当前实验口径（矩阵、种子、训练参数）：[dp-manip/PLAN.md](./dp-manip/PLAN.md)，以
   `dp-manip/configs/` 为准
