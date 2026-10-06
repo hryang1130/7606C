@@ -1,0 +1,9 @@
+视频怎么录
+成功和失败 rollout 统一用 scripts/record_rollout_videos.py 录：1920×1080 H.264，PowerPoint 可以直接播放；每段都和该 run 已保存的评估逐回合核对过，就是成功率背后的那些回合。示范视频还没有脚本。完整说明见 dp-manip README.md 的「汇报视频」一节。
+1. 用哪份代码：PickCube、StackCube、PushCube、PullCube 用总仓库 7606C main 里的 dp-manip/；PlaceSphere、LiftPegUpright 用 dp-manip 的 exp/failure-aware-dp 分支，因为这两个任务的 checkpoint 是这个分支训练的，main 的代码加载不了。
+2. 用哪个 checkpoint：建议用第 5 页基线对应的 N=100 UNet、训练种子 1 的 final.pt。
+3. 提交作业（在仓库根目录）：
+sbatch --export=ALL,CHECKPOINTS="$RUN_ROOT/<run>/checkpoints/final.pt" slurm/record_videos.sbatch
+4. PlaceSphere 另加参数：它有 50 步和 200 步两份评估，要指定 200 步那份：EXTRA_ARGS="--reference $RUN_ROOT/<run>/eval/test_final_h200.json"。
+5. 结果在哪：<run>/videos/test_final/ 下的 <task>_test_seed<seed>_<success|failure>.mp4，加上记录参数和逐回合结果的 videos.json。默认录 3 成功、3 失败，挑 1 成功、1 失败交。时长约为回合步数 ÷ 20 fps，再加 1 秒定格：100 步的任务约 6 s，200 步约 11 s。
+6. 出错先停：作业报「episodes differ」说明和评估对不上，先停下来在群里说，不要换参数重跑。集群每人只能挂一个作业，要等手上的作业跑完再交。
