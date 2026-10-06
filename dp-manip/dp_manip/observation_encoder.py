@@ -105,3 +105,25 @@ class ObservationEncoder(nn.Module):
         features = self.encode_rgb(rgb)
         proprio = self.normalize_proprio(proprio.to(dtype=torch.float32))
         return torch.cat((features, proprio), dim=-1)
+
+
+class StateObservationEncoder(nn.Module):
+    """Normalize complete state histories without constructing a visual encoder."""
+
+    def __init__(self, *, obs_horizon: int, state_dim: int, stats: NormalizationStats):
+        super().__init__()
+        if obs_horizon < 1 or state_dim < 1:
+            raise ValueError("state_dim and obs_horizon must be positive")
+        if stats.proprio_mean.shape != (state_dim,) or stats.proprio_std.shape != (state_dim,):
+            raise ValueError("normalization statistics do not match the complete state width")
+        self.obs_horizon = obs_horizon
+        self.output_dim = state_dim
+        self.register_buffer("proprio_mean", torch.as_tensor(stats.proprio_mean))
+        self.register_buffer("proprio_std", torch.as_tensor(stats.proprio_std))
+
+    def forward(self, rgb: torch.Tensor | None, state: torch.Tensor) -> torch.Tensor:
+        if rgb is not None:
+            raise ValueError("state policy expects no RGB input")
+        if state.ndim != 3 or state.shape[1:] != (self.obs_horizon, self.output_dim):
+            raise ValueError(f"expected (B,{self.obs_horizon},{self.output_dim}) state history, got {tuple(state.shape)}")
+        return ((state.float() - self.proprio_mean) / self.proprio_std).clamp(-10.0, 10.0)

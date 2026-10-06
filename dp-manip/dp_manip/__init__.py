@@ -1,1 +1,1 @@
-"""RGB Diffusion Policy for the six ManiSkill manipulation tasks."""
+"""RGB Diffusion Policy for ManiSkill manipulation tasks."""

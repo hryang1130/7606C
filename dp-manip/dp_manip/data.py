@@ -1,10 +1,12 @@
-"""RGB trajectory loading for the ``maniskill-demogen`` export schema.
+"""RGB or complete-state trajectories from the ``maniskill-demogen`` export.
 
 By default the selected episodes are decoded into RAM once (about 15 MB per
 demo), so every gzip chunk is decompressed a single time. With
 ``preload=False`` compressed RGB frames remain in HDF5 and DataLoader workers
 read them per temporal window, which re-inflates each chunk once per window and
-saturates the CPU; windows are bit-identical either way.
+saturates the CPU; windows are bit-identical either way. Explicit state mode
+reads only ``obs`` and ``actions``. ``proprio`` is the shared batch field for
+low-dimensional observations; its width is the complete state width in that mode.
 """
 
 from __future__ import annotations
@@ -26,6 +28,10 @@ class EpisodeInfo:
     episode_id: int
     seed: int
     length: int
+    # First timestep that starts a training window. Takeover corrections keep
+    # their real pre-takeover frame as observation history but are trained only
+    # from the takeover onwards (docs/failure-expert-takeover-probe.zh-CN.md).
+    start: int = 0
 
 
 @dataclass(frozen=True)
@@ -34,11 +40,16 @@ class DatasetInfo:
     env_id: str
     control_mode: str
     episodes: tuple[EpisodeInfo, ...]
-    image_shape: tuple[int, int, int]
+    image_shape: tuple[int, int, int] | None
     proprio_dim: int
     action_dim: int
     cameras: tuple[str, ...]
     rgb_env_info: dict[str, Any] | None
+    obs_mode: str = "rgb"
+
+    @property
+    def observation_key(self) -> str:
+        return "obs" if self.obs_mode == "state" else "obs_rgb/state"
 
     @property
     def seeds(self) -> list[int]:
@@ -46,7 +57,7 @@ class DatasetInfo:
 
     @property
     def num_cameras(self) -> int:
-        return self.image_shape[-1] // 3
+        return 0 if self.image_shape is None else self.image_shape[-1] // 3
 
     @property
     def num_transitions(self) -> int:
@@ -125,8 +136,13 @@ def _select_episode_entries(
     return ordered[:num_demos]
 
 
-def read_dataset_info(path: str | Path, num_demos: int | None = None) -> DatasetInfo:
+def read_dataset_info(
+    path: str | Path, num_demos: int | None = None, *, obs_mode: str = "rgb"
+) -> DatasetInfo:
     """Validate an exported dataset and return lightweight episode metadata."""
+    if obs_mode not in ("rgb", "state"):
+        raise ValueError("obs_mode must be rgb or state")
+    observation_key = "obs" if obs_mode == "state" else "obs_rgb/state"
     path = Path(path).resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -136,6 +152,8 @@ def read_dataset_info(path: str | Path, num_demos: int | None = None) -> Dataset
     meta = json.loads(sidecar.read_text(encoding="utf-8"))
     env_info = meta["env_info"]
     env_kwargs = env_info["env_kwargs"]
+    if obs_mode == "state" and env_kwargs.get("obs_mode", "state") != "state":
+        raise ValueError(f"{sidecar}: complete state observations require state export metadata")
     entries = _select_episode_entries(meta["episodes"], sidecar, num_demos)
 
     episodes: list[EpisodeInfo] = []
@@ -149,25 +167,38 @@ def read_dataset_info(path: str | Path, num_demos: int | None = None) -> Dataset
             if group_name not in file:
                 raise ValueError(f"{path}: JSON references missing group {group_name}")
             group = file[group_name]
-            for key in ("obs_rgb/rgb", "obs_rgb/state", "actions"):
+            keys = (observation_key, "actions")
+            if obs_mode == "rgb":
+                keys += ("obs_rgb/rgb",)
+            for key in keys:
                 if key not in group:
                     raise ValueError(f"{path}/{group_name}: missing {key}; use maniskill-demogen export output")
-            images = group["obs_rgb/rgb"]
-            proprio = group["obs_rgb/state"]
+            images = group["obs_rgb/rgb"] if obs_mode == "rgb" else None
+            proprio = group[observation_key]
             actions = group["actions"]
-            if images.dtype != np.uint8 or images.ndim != 4 or images.shape[-1] % 3:
+            if images is not None and (
+                images.dtype != np.uint8 or images.ndim != 4 or images.shape[-1] % 3
+            ):
                 raise ValueError(f"{images.name}: expected uint8 (T+1,H,W,3*C), got {images.dtype} {images.shape}")
             if (
-                proprio.ndim != 2
+                not isinstance(proprio, h5py.Dataset)
+                or proprio.ndim != 2
                 or actions.ndim != 2
                 or len(proprio) != len(actions) + 1
-                or len(images) != len(actions) + 1
+                or len(actions) < 1
+                or proprio.shape[1] < 1
+                or actions.shape[1] < 1
+                or (images is not None and len(images) != len(actions) + 1)
             ):
-                raise ValueError(f"{path}/{group_name}: RGB/state/actions are not aligned as T+1/T")
-            current_image_shape = tuple(int(value) for value in images.shape[1:])
+                raise ValueError(f"{path}/{group_name}: observations/actions are not aligned as T+1/T")
+            if obs_mode == "state" and (
+                proprio.dtype != np.float32 or actions.dtype != np.float32
+            ):
+                raise ValueError(f"{path}/{group_name}: state/actions must be float32")
+            current_image_shape = tuple(int(value) for value in images.shape[1:]) if images is not None else None
             current_proprio_dim = int(proprio.shape[1])
             current_action_dim = int(actions.shape[1])
-            if image_shape is None:
+            if proprio_dim is None:
                 image_shape, proprio_dim, action_dim = current_image_shape, current_proprio_dim, current_action_dim
             elif (image_shape, proprio_dim, action_dim) != (
                 current_image_shape,
@@ -177,23 +208,29 @@ def read_dataset_info(path: str | Path, num_demos: int | None = None) -> Dataset
                 raise ValueError(f"{path}/{group_name}: observation or action dimensions changed between episodes")
             if "success" in group and not bool(group["success"][-1]):
                 raise ValueError(f"{path}/{group_name}: exported episode is not successful")
+            start = int(entry.get("train_start", 0))
+            if not 0 <= start < len(actions):
+                raise ValueError(f"{path}/{group_name}: train_start {start} outside [0, {len(actions)})")
             episodes.append(
-                EpisodeInfo(group_name, episode_id, _episode_seed(entry, sidecar), len(actions))
+                EpisodeInfo(group_name, episode_id, _episode_seed(entry, sidecar), len(actions), start)
             )
 
-    if not episodes or image_shape is None or proprio_dim is None or action_dim is None:
+    if not episodes or proprio_dim is None or action_dim is None:
         raise ValueError(f"{path}: no usable episodes")
 
-    cameras: tuple[str, ...] = tuple(f"camera_{index}" for index in range(image_shape[-1] // 3))
+    cameras: tuple[str, ...] = (
+        tuple(f"camera_{index}" for index in range(image_shape[-1] // 3))
+        if image_shape is not None else ()
+    )
     rgb_env_info = None
     info_path = export_info_path(path)
-    if info_path.is_file():
+    if obs_mode == "rgb" and info_path.is_file():
         export = json.loads(info_path.read_text(encoding="utf-8"))
         cameras = tuple(export.get("cameras", cameras))
         rgb_env_info = export.get("rgb_env_info")
         if tuple(export.get("obs_rgb_image_shape", image_shape)) != image_shape:
             raise ValueError(f"{info_path}: image shape does not match HDF5")
-    if len(cameras) != image_shape[-1] // 3:
+    if image_shape is not None and len(cameras) != image_shape[-1] // 3:
         raise ValueError(f"{path}: {len(cameras)} camera names but image has {image_shape[-1]} channels")
 
     return DatasetInfo(
@@ -206,11 +243,16 @@ def read_dataset_info(path: str | Path, num_demos: int | None = None) -> Dataset
         action_dim=action_dim,
         cameras=cameras,
         rgb_env_info=rgb_env_info,
+        obs_mode=obs_mode,
     )
 
 
 def compute_normalization(info: DatasetInfo, epsilon: float = 1e-3) -> NormalizationStats:
-    """Compute proprioception z-score and action min/max from training demos only."""
+    """Compute low-dimensional observation z-score and action bounds from train only.
+
+    The historical ``proprio_*`` fields contain complete privileged state in
+    state mode; ``DatasetInfo.obs_mode`` identifies their meaning.
+    """
     count = 0
     proprio_sum = np.zeros(info.proprio_dim, dtype=np.float64)
     proprio_sq_sum = np.zeros(info.proprio_dim, dtype=np.float64)
@@ -219,7 +261,7 @@ def compute_normalization(info: DatasetInfo, epsilon: float = 1e-3) -> Normaliza
     with h5py.File(info.path, "r") as file:
         for episode in info.episodes:
             group = file[episode.group]
-            proprio = np.asarray(group["obs_rgb/state"][: episode.length], dtype=np.float64)
+            proprio = np.asarray(group[info.observation_key][: episode.length], dtype=np.float64)
             actions = np.asarray(group["actions"], dtype=np.float64)
             if not (np.isfinite(proprio).all() and np.isfinite(actions).all()):
                 raise ValueError(f"{info.path}/{episode.group}: non-finite proprio or action")
@@ -247,7 +289,7 @@ def compute_normalization(info: DatasetInfo, epsilon: float = 1e-3) -> Normaliza
 EPISODE_KEYS = ("obs_rgb/rgb", "obs_rgb/state", "actions")
 
 
-class RGBWindowDataset(Dataset):
+class ObservationWindowDataset(Dataset):
     """Episode-local observation/action windows with repeated boundary padding.
 
     ``preload`` (the default) decodes every selected episode into RAM up
@@ -263,7 +305,7 @@ class RGBWindowDataset(Dataset):
         self.index = [
             (episode_index, timestep)
             for episode_index, episode in enumerate(info.episodes)
-            for timestep in range(episode.length)
+            for timestep in range(episode.start, episode.length)
         ]
         self._file: h5py.File | None = None
         self._episodes: list[dict[str, np.ndarray]] | None = None
@@ -271,9 +313,15 @@ class RGBWindowDataset(Dataset):
             # Whole-episode reads decompress each chunk once.
             with h5py.File(info.path, "r") as file:
                 self._episodes = [
-                    {key: file[episode.group][key][()] for key in EPISODE_KEYS}
+                    {key: file[episode.group][key][()] for key in self.episode_keys}
                     for episode in info.episodes
                 ]
+
+    @property
+    def episode_keys(self) -> tuple[str, ...]:
+        if self.info.obs_mode == "state":
+            return (self.info.observation_key, "actions")
+        return EPISODE_KEYS
 
     def __len__(self) -> int:
         return len(self.index)
@@ -307,9 +355,7 @@ class RGBWindowDataset(Dataset):
 
         obs_indices = np.arange(timestep - self.obs_horizon + 1, timestep + 1)
         obs_indices = np.clip(obs_indices, 0, episode.length)
-        images = self._read_frames(group["obs_rgb/rgb"], obs_indices)
-        proprio = self._read_frames(group["obs_rgb/state"], obs_indices).astype(np.float32)
-        images = np.transpose(images, (0, 3, 1, 2))
+        proprio = self._read_frames(group[self.info.observation_key], obs_indices).astype(np.float32)
 
         action_indices = np.arange(
             timestep - self.obs_horizon + 1,
@@ -317,7 +363,11 @@ class RGBWindowDataset(Dataset):
         )
         clipped = np.clip(action_indices, 0, episode.length - 1)
         actions = self._read_frames(group["actions"], clipped).astype(np.float32)
-        return {"rgb": images, "proprio": proprio, "actions": actions}
+        sample = {"proprio": proprio, "actions": actions}
+        if self.info.obs_mode == "rgb":
+            images = self._read_frames(group["obs_rgb/rgb"], obs_indices)
+            sample["rgb"] = np.transpose(images, (0, 3, 1, 2))
+        return sample
 
     def close(self) -> None:
         if self._file is not None:
@@ -331,3 +381,7 @@ class RGBWindowDataset(Dataset):
 
     def __del__(self) -> None:
         self.close()
+
+
+# Compatibility for existing RGB consumers; both modes use identical windows.
+RGBWindowDataset = ObservationWindowDataset

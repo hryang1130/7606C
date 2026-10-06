@@ -10,7 +10,9 @@ Per baseline checkpoint::
 Rollouts go to ``<run root>/failure_aware/<task>/s<train seed>/`` by default,
 where ``<run root>`` is the directory holding the checkpoint's run directory.
 The task comes from the checkpoint's recorded config; nothing here is
-task-specific.
+task-specific. ``--max-episode-steps`` replaces the recorded horizon with the
+study's locked one (plan §13); ``failure_study.py record-collection`` refuses
+a collection made at another horizon.
 """
 
 from __future__ import annotations
@@ -37,6 +39,13 @@ from dp_manip.failure_rollout import (  # noqa: E402
 from dp_manip.metadata import file_sha256, git_revision  # noqa: E402
 
 
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"{value} is not positive")
+    return value
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -50,6 +59,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     run.add_argument("--device", default="cuda")
     run.add_argument("--render-backend", help="for example 'cpu' to force lavapipe")
     run.add_argument("--overwrite", action="store_true", help="replace an existing raw file")
+    run.add_argument(
+        "--max-episode-steps",
+        type=positive_int,
+        help="episode horizon; default: the checkpoint's recorded one (plan §13)",
+    )
 
     build = commands.add_parser("build", help="build datasets from a checkpoint's raw rollouts")
     build.add_argument("rollout_dir", type=Path)
@@ -78,6 +92,9 @@ def run_collect(args: argparse.Namespace, envs_factory=default_envs_factory) -> 
     checkpoint_path = args.checkpoint.resolve()
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = from_recorded(checkpoint["config"])
+    recorded_horizon = cfg.task.max_episode_steps
+    if args.max_episode_steps is not None:
+        cfg.task.max_episode_steps = args.max_episode_steps
     protocol.check_against(cfg)
     train_data = checkpoint["train_data"]
     policy = DiffusionPolicy.from_checkpoint(checkpoint, device)
@@ -126,6 +143,7 @@ def run_collect(args: argparse.Namespace, envs_factory=default_envs_factory) -> 
             "env_id": cfg.task.env_id,
             "control_mode": cfg.task.control_mode,
             "max_episode_steps": cfg.task.max_episode_steps,
+            "checkpoint_max_episode_steps": recorded_horizon,
             "act_horizon": cfg.policy.act_horizon,
             "source_checkpoint": {
                 "path": str(checkpoint_path),

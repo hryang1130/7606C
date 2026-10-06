@@ -1,0 +1,3 @@
+# Compatibility entry point. New commands should use tasks/liftpegupright.toml.
+[legacy]
+task_config = "tasks/liftpegupright.toml"

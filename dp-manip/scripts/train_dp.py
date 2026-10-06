@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train an RGB Diffusion Policy from ``maniskill-demogen`` datasets.
+"""Train an RGB or complete-state policy from ``maniskill-demogen`` datasets.
 
 This is the sweep/Slurm entry point: it resolves a task config plus an optional
 experiment grid value and hands the result to the single trainer in

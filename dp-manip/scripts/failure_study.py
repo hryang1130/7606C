@@ -63,6 +63,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="root of failure_aware/<task>/s<seed>/ (default: the run root); a smoke run uses a scratch root",
     )
+    cell.add_argument(
+        "--max-episode-steps",
+        type=positive_int,
+        help="horizon of every closed-loop stage (plan §1, §13); reads eval/val_final_h<N>.json. "
+        "Default: the checkpoints' recorded horizon and eval/val_final.json",
+    )
+    cell.add_argument(
+        "--no-low-success",
+        action="store_true",
+        help="stop instead of entering low-success mode when no cell is in the band (plan §12.3, replication task)",
+    )
     collection = command("record-collection", "lock one checkpoint's built datasets")
     collection.add_argument("--seed", type=int, required=True)
     command("pilot", "choose lr/steps from the offline pilot (plan §4.4)", torch_device=True)
@@ -79,6 +90,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     command("select-c1", "choose C1's alpha (plan §5.5)")
     command("status", "print the locked stages and the GPU-hours spent")
     return parser.parse_args(argv)
+
+
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"{value} is not positive")
+    return value
 
 
 def open_lock(args: argparse.Namespace) -> LockFile:
@@ -106,17 +124,24 @@ def write_json(path: Path, payload: dict) -> None:
 
 def select_cell(args, lock: LockFile, protocol: FailureProtocol) -> None:
     cell = protocol.baseline_cell
-    n100 = study.read_val_success(args.run_root, args.task, 100, cell.val_seeds)
+    horizon = args.max_episode_steps
+    n100 = study.read_val_success(args.run_root, args.task, 100, cell.val_seeds, horizon)
     if n100 is None:
-        raise FileNotFoundError(f"N=100 validation results of seeds {cell.val_seeds} are missing under {args.run_root}")
-    n200 = study.read_val_success(args.run_root, args.task, 200, cell.val_seeds)
-    choice = study.select_baseline_cell(n100, n200, low=cell.min_val_success, high=cell.max_val_success)
+        raise FileNotFoundError(
+            f"N=100 {study.val_result_name(horizon)} of seeds {cell.val_seeds} are missing under {args.run_root}"
+        )
+    n200 = study.read_val_success(args.run_root, args.task, 200, cell.val_seeds, horizon)
+    choice = study.select_baseline_cell(
+        n100, n200, low=cell.min_val_success, high=cell.max_val_success, allow_low_success=not args.no_low_success
+    )
     checkpoints = {}
     for seed in cell.checkpoint_seeds:
         path = study.baseline_run_dir(args.run_root, args.task, choice["num_demos"], seed) / "checkpoints" / "final.pt"
         if not path.is_file():
             raise FileNotFoundError(path)
         checkpoints[f"s{seed}"] = {"path": str(path.resolve()), "sha256": file_sha256(path)}
+    if horizon is None:
+        horizon = recorded_horizon(next(iter(checkpoints.values()))["path"])
     lock.write(
         "task",
         {
@@ -125,12 +150,25 @@ def select_cell(args, lock: LockFile, protocol: FailureProtocol) -> None:
             "val_seeds": list(cell.val_seeds),
             "val_success_n100": n100,
             "val_success_n200": n200,
+            "max_episode_steps": horizon,
+            "val_results": study.val_result_name(args.max_episode_steps),
+            "low_success_allowed": not args.no_low_success,
             "protocol_sha256": protocol.sha256,
             "rollout_root": str(args.rollout_root.resolve()) if args.rollout_root else None,
         },
     )
     lock.write("checkpoints", checkpoints)
-    print(f"{args.task}: N={choice['num_demos']} ({choice['mode']}), mean val success {choice['mean_val_success']:.3f}")
+    print(
+        f"{args.task}: N={choice['num_demos']} ({choice['mode']}), mean val success "
+        f"{choice['mean_val_success']:.3f}, horizon {horizon}"
+    )
+
+
+def recorded_horizon(checkpoint_path: str) -> int:
+    import torch
+
+    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    return int(payload["config"]["task"]["max_episode_steps"])
 
 
 def record_collection(args, lock: LockFile, protocol: FailureProtocol) -> None:
@@ -141,6 +179,12 @@ def record_collection(args, lock: LockFile, protocol: FailureProtocol) -> None:
         raise ValueError(f"{summary_path} was collected from another checkpoint")
     if summary["protocol"]["sha256"] != protocol.sha256:
         raise ValueError(f"{summary_path} was built under another protocol file")
+    horizon = study.study_horizon(lock)
+    if horizon is not None and int(summary["max_episode_steps"]) != horizon:
+        raise ValueError(
+            f"{summary_path} was collected at {summary['max_episode_steps']} steps, the locked horizon is {horizon}; "
+            "collect with --max-episode-steps"
+        )
     lock.write(
         f"collection.s{args.seed}",
         {
@@ -275,13 +319,19 @@ def gate(args, lock: LockFile, protocol: FailureProtocol) -> None:
 
 
 def baseline_config(lock: LockFile, seed: int):
+    """The checkpoint's recorded config at the locked horizon, and the recorded horizon."""
     import torch
 
     from dp_manip.config import from_recorded
 
     checkpoint = lock.require(f"checkpoints.s{seed}", "select-cell")
     payload = torch.load(checkpoint["path"], map_location="cpu", weights_only=False)
-    return from_recorded(payload["config"])
+    cfg = from_recorded(payload["config"])
+    recorded = cfg.task.max_episode_steps
+    horizon = study.study_horizon(lock)
+    if horizon is not None:
+        cfg.task.max_episode_steps = horizon
+    return cfg, recorded
 
 
 def default_envs_factory(cfg, num_envs: int, render_backend: str | None):
@@ -300,13 +350,15 @@ def run_policy(policy, cfg, seeds, device, envs_factory, render_backend) -> dict
         envs.close()
 
 
-def context(lock: LockFile, protocol: FailureProtocol, cfg, device) -> dict[str, Any]:
+def context(lock: LockFile, protocol: FailureProtocol, cfg, recorded_horizon: int, device) -> dict[str, Any]:
     return {
         "lock": {"path": str(lock.path), "sha256": lock.sha256},
         "protocol_sha256": protocol.sha256,
         "git": git_revision(ROOT),
         "num_envs": cfg.eval.num_envs,
         "inference_seed": cfg.eval.inference_seed,
+        "max_episode_steps": cfg.task.max_episode_steps,
+        "checkpoint_max_episode_steps": recorded_horizon,
         "device": str(device),
         "finished_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
     }
@@ -319,7 +371,7 @@ def dry_run(args, lock: LockFile, protocol: FailureProtocol, envs_factory: Calla
         raise RuntimeError("the offline gate failed: the study stops here (plan §6.7)")
     device = torch_device(args.device)
     seed = study.checkpoint_seeds(lock)[0]
-    cfg = baseline_config(lock, seed)
+    cfg, recorded = baseline_config(lock, seed)
     seeds = study.dry_run_seeds(protocol)
     checkpoint = lock.require(f"checkpoints.s{seed}", "select-cell")
     models = lock.require(f"models.s{seed}", "record-models")
@@ -345,10 +397,10 @@ def dry_run(args, lock: LockFile, protocol: FailureProtocol, envs_factory: Calla
     reproduces = observed["episodes"] == expected["episodes"]
     summary = diagnostics.summary()
     output = study.rollout_dir(lock, seed) / "eval" / "dry"
-    write_json(output / "baseline.json", {**expected, **context(lock, protocol, cfg, device)})
+    write_json(output / "baseline.json", {**expected, **context(lock, protocol, cfg, recorded, device)})
     write_json(
         output / "alpha0_guided.json",
-        {**observed, "arm": spec.to_dict(), "diagnostics": summary, **context(lock, protocol, cfg, device)},
+        {**observed, "arm": spec.to_dict(), "diagnostics": summary, **context(lock, protocol, cfg, recorded, device)},
     )
     if not reproduces:
         raise RuntimeError(
@@ -361,6 +413,7 @@ def dry_run(args, lock: LockFile, protocol: FailureProtocol, envs_factory: Calla
             "seed": seed,
             "episodes": len(seeds),
             "seed_range": [seeds[0], seeds[-1] + 1],
+            "max_episode_steps": cfg.task.max_episode_steps,
             "m": summary["mean_half_one_minus_cos"],
             "mean_cosine": summary["mean"]["cosine"],
             "alpha0_reproduces_baseline": True,
@@ -376,7 +429,7 @@ def evaluate_arms(args, lock: LockFile, protocol: FailureProtocol, envs_factory:
     seeds = args.seeds or study.checkpoint_seeds(lock)
     grid = [None] if args.split == "test" else (args.grid_values or list(protocol.guidance.alpha_grid))
     for seed in seeds:
-        cfg = baseline_config(lock, seed)
+        cfg, recorded = baseline_config(lock, seed)
         episode_seeds = study.tuning_seeds(protocol) if args.split == "tuning" else protocol.test_seeds(cfg)
         for grid_value in grid:
             spec = study.resolve_arm(lock, protocol, arm=args.arm, split=args.split, seed=seed, grid_value=grid_value)
@@ -393,7 +446,7 @@ def evaluate_arms(args, lock: LockFile, protocol: FailureProtocol, envs_factory:
                     **result,
                     "arm": spec.to_dict(),
                     "diagnostics": diagnostics.summary() if diagnostics is not None else None,
-                    **context(lock, protocol, cfg, device),
+                    **context(lock, protocol, cfg, recorded, device),
                 },
             )
             successes = sum(episode["success_once"] for episode in result["episodes"])

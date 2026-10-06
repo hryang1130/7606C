@@ -1,0 +1,76 @@
+# Expert takeover probe v2: take over at a missed grasp (PlaceSphere, N100 s1).
+# Written before any v2 run. v1 (configs/failure_aware/takeover_probe.toml)
+# covered ~9% of baseline failures; ~90% of failures close the gripper on
+# nothing (docs/failure-expert-takeover-probe.zh-CN.md §7). The runner records
+# this file's sha256 with every output; the probe decision is write-once.
+
+[source]
+lock = "configs/failure_aware/placesphere.toml"
+checkpoint = "s1"
+max_episode_steps = 200
+inference_seed = 0
+
+[seeds]
+# Fresh ranges, disjoint from v1 (40000-40029, 40900-40919) and every earlier study.
+development = [40920, 40950]
+probe = [40100, 40130]
+
+[trigger]
+# Earliest action-chunk boundary t <= max_t at which the last closed_window
+# states have finger width < max_finger_width, the last ungrasped_window states
+# are not grasped, the sphere is within max_obj_lift of its reset height, and
+# S_1..S_t never succeeded. Reads nothing after t.
+kind = "grasp_miss"
+act_horizon = 8
+closed_window = 4
+max_finger_width = 0.02  # held sphere: median 0.035, 1st percentile 0.027 (s1 raw rollouts)
+ungrasped_window = 8
+max_obj_lift = 0.01
+max_t = 96  # leaves >= 104 steps for regrasp + transport + place
+
+[regrasp]
+# Open and rise, align over the sphere, lower to its centre, close; retry once.
+max_step = 0.02
+approach_height = 0.06
+grasp_z_offset = 0.0
+xy_tolerance = 0.003
+z_tolerance = 0.004
+open_steps = 4
+close_steps = 8
+confirm_steps = 3
+max_attempts = 2
+rise_timeout = 20
+align_timeout = 30
+lower_timeout = 25
+# Added after development batch a (40920-40929, before any probe run): two
+# knocked spheres rolled away at 0.1-0.2 m/s while the expert rose straight up.
+lead_speed = 0.15  # aim ahead by velocity x min(gap / lead_speed, max_lead)
+max_lead = 0.5  # seconds
+rise_clearance = 0.03  # move sideways during the rise once this far above the sphere centre
+
+[expert]
+# Transport/place after the regrasp: v1's controller and values, except that
+# "settled" uses a position change (v1's reported sphere velocity stayed at
+# 0.06-0.18 m/s while a held sphere was not moving, so descend timed out).
+max_step = 0.02
+transport_clearance = 0.03
+release_height = 0.015
+min_tcp_above_bin = 0.025
+xy_tolerance = 0.004
+z_tolerance = 0.004
+transport_z_tolerance = 0.01
+settle_speed = 0.05
+settle_displacement = 0.001
+release_steps = 6
+retract_height = 0.05
+lost_grasp_steps = 3
+transport_timeout = 60
+descend_timeout = 30
+retract_timeout = 20
+
+[gates]
+replay_state_match = 1.0
+baseline_replay_match = 1.0
+min_triggered_baseline_failures = 12  # of 30 seeds; s1 raw rollouts predict ~0.9 x failures
+min_expert_success = 0.7  # over all triggered starts, every attempt in the denominator
+min_expert_success_on_failures = 0.7

@@ -1,4 +1,4 @@
-"""Closed-loop RGB policy evaluation on explicit held-out reset seeds."""
+"""Closed-loop RGB or state policy evaluation on explicit held-out reset seeds."""
 
 from __future__ import annotations
 
@@ -41,9 +41,20 @@ def _numpy(value) -> np.ndarray:
 
 
 def _adapt_environment_observation(
-    observation: dict, num_envs: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Adapt ManiSkill's flattened ``state`` field to canonical proprioception."""
+    observation, num_envs: int, obs_mode: str = "rgb"
+) -> tuple[np.ndarray | None, np.ndarray]:
+    """Read RGB proprioception or a complete state vector, without falling back."""
+    if obs_mode == "state":
+        if isinstance(observation, dict):
+            raise ValueError("expected a flat complete state vector from obs_mode=state")
+        state = _numpy(observation)
+        if state.ndim == 3 and state.shape[:2] == (num_envs, 1):
+            state = state[:, 0]
+        if state.ndim != 2 or len(state) != num_envs:
+            raise ValueError(f"unexpected environment state shape: {state.shape}")
+        return None, state
+    if obs_mode != "rgb":
+        raise ValueError("obs_mode must be rgb or state")
     if not isinstance(observation, dict) or "rgb" not in observation or "state" not in observation:
         raise ValueError(f"expected flattened RGB observation dict, got {type(observation).__name__}")
     rgb, proprio = _numpy(observation["rgb"]), _numpy(observation["state"])
@@ -75,6 +86,9 @@ def evaluate(
     identical to the same waves of an unobserved evaluation.
     """
     num_envs = envs.num_envs
+    obs_mode = getattr(policy, "obs_mode", "rgb")
+    if obs_mode == "state" and observer is not None:
+        raise ValueError("RGB rollout observers are unsupported for state evaluation")
     if len(seeds) % num_envs:
         raise ValueError("number of seeds must be divisible by the number of environments")
     was_training = policy.training
@@ -88,10 +102,10 @@ def evaluate(
     for offset in range(0, len(seeds), num_envs):
         chunk = list(seeds[offset : offset + num_envs])
         observation, _ = envs.reset(seed=chunk)
-        rgb, proprio = _adapt_environment_observation(observation, num_envs)
+        rgb, proprio = _adapt_environment_observation(observation, num_envs, obs_mode)
         if observer is not None:
             observer.on_reset(chunk, rgb, proprio)
-        rgb_history = np.repeat(rgb[:, None], policy.obs_horizon, axis=1)
+        rgb_history = np.repeat(rgb[:, None], policy.obs_horizon, axis=1) if rgb is not None else None
         proprio_history = np.repeat(proprio[:, None], policy.obs_horizon, axis=1)
         success_once = np.zeros(num_envs, dtype=bool)
         success_at_end = np.zeros(num_envs, dtype=bool)
@@ -100,8 +114,10 @@ def evaluate(
         finished = False
 
         while not finished:
-            rgb_tensor = torch.as_tensor(
-                np.transpose(rgb_history, (0, 1, 4, 2, 3)), device=device, dtype=torch.uint8
+            rgb_tensor = (
+                torch.as_tensor(
+                    np.transpose(rgb_history, (0, 1, 4, 2, 3)), device=device, dtype=torch.uint8
+                ) if rgb_history is not None else None
             )
             proprio_tensor = torch.as_tensor(proprio_history, device=device, dtype=torch.float32)
             tick = time.time()
@@ -113,8 +129,9 @@ def evaluate(
 
             for action_index in range(action_chunks.shape[1]):
                 observation, reward, _, truncated, info = envs.step(action_chunks[:, action_index])
-                rgb, proprio = _adapt_environment_observation(observation, num_envs)
-                rgb_history = np.concatenate((rgb_history[:, 1:], rgb[:, None]), axis=1)
+                rgb, proprio = _adapt_environment_observation(observation, num_envs, obs_mode)
+                if rgb_history is not None:
+                    rgb_history = np.concatenate((rgb_history[:, 1:], rgb[:, None]), axis=1)
                 proprio_history = np.concatenate(
                     (proprio_history[:, 1:], proprio[:, None]), axis=1
                 )

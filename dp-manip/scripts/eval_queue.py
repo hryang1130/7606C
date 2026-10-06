@@ -62,6 +62,7 @@ def queue_evaluation(
     num_envs: int | None = None,
     render_backend: str | None = None,
     python: str | None = None,
+    max_episode_steps: int | None = None,
     command_builder: Callable[[Run], Sequence[str]] | None = None,
 ) -> QueueSummary:
     """Run every checkpointed run through the shared GPU queue.
@@ -82,6 +83,7 @@ def queue_evaluation(
                 num_envs=num_envs,
                 render_backend=render_backend,
                 python=python,
+                max_episode_steps=max_episode_steps,
             )
 
     ready: list[Run] = []
@@ -96,7 +98,8 @@ def queue_evaluation(
             flush=True,
         )
     if logs_dir is None:
-        logs_dir = Path(output_root).expanduser().resolve() / "logs" / "eval"
+        label = "eval" if max_episode_steps is None else f"eval-{split}-h{max_episode_steps}"
+        logs_dir = Path(output_root).expanduser().resolve() / "logs" / label
     return run_queue(
         [Job(name=run.name, command=command_builder(run)) for run in ready],
         workers=workers,
@@ -130,6 +133,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="evaluation split (default: $SPLIT, else test)",
     )
     parser.add_argument("--episodes", type=int, help="override the split's episode count")
+    parser.add_argument("--max-episode-steps", type=int, help="evaluation-only horizon override")
     parser.add_argument(
         "--num-envs",
         type=int,
@@ -144,7 +148,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=tuple(range(1, MAX_WORKERS + 1)),
         help="parallel evaluators; a single Slurm job has at most 2 GPUs",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.max_episode_steps is not None and args.max_episode_steps <= 0:
+        parser.error("--max-episode-steps must be positive")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -158,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         episodes=args.episodes,
         num_envs=args.num_envs,
         render_backend=args.render_backend,
+        max_episode_steps=args.max_episode_steps,
     )
     return summary.exit_code
 

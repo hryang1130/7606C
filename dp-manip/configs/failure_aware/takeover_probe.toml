@@ -1,0 +1,57 @@
+# Expert mid-episode takeover feasibility probe (PlaceSphere, baseline N100 s1).
+# Written before any probe run; docs/failure-expert-takeover-probe.zh-CN.md
+# explains each value. The probe runner records this file's sha256 with every
+# output, and its decision file is write-once.
+
+[source]
+lock = "configs/failure_aware/placesphere.toml"
+checkpoint = "s1"
+max_episode_steps = 200
+# Every episode gets its own CUDA generator seeded with inference_seed + reset
+# seed, so an episode does not depend on the other episodes run with it.
+inference_seed = 0
+
+[seeds]
+# Half-open ranges. Expert-demo train seeds start at 0 and val at 4000;
+# failure-aware studies use 10000-10099 (test), 20000-23000 and 32000-34127.
+# The development range is only for debugging the expert and never enters the
+# probe decision; the probe range is run once, after the expert is frozen.
+development = [40900, 40920]
+probe = [40000, 40030]
+
+[trigger]
+# Earliest action-chunk boundary t (t actions executed, before the next chunk is
+# sampled) at which all of the following hold for states S_{t-window+1}..S_t.
+act_horizon = 8
+window = 16
+min_lift = 0.03  # sphere centre above its reset height, metres
+max_slip = 0.01  # max |(sphere - TCP) - (sphere - TCP at t)| in the window, metres
+max_t = 120  # leaves >= 80 of the 200 shared steps for both branches
+# Additionally: never succeeded in S_1..S_t, and not is_obj_on_bin at S_t.
+
+[expert]
+# Scripted privileged-state controller acting directly in pd_ee_delta_pos
+# (normalised actions; 1.0 = 0.1 m). It keeps the current grasp.
+max_step = 0.02  # metres per step per axis (normalised 0.2, inside the demo range)
+transport_clearance = 0.03  # sphere above its resting height in the bin while moving
+release_height = 0.015  # sphere above its resting height when the gripper opens
+min_tcp_above_bin = 0.025  # TCP never commanded below bin_z + this (finger/wall clearance)
+xy_tolerance = 0.004
+z_tolerance = 0.004
+transport_z_tolerance = 0.01
+settle_speed = 0.05  # m/s, sphere speed before release
+release_steps = 6
+retract_height = 0.05
+lost_grasp_steps = 3  # consecutive ungrasped steps during transport/descend
+transport_timeout = 60
+descend_timeout = 30
+retract_timeout = 20
+
+[gates]
+# All must hold for the probe to pass and corrective collection to start.
+# Over every probe seed whose baseline rollout triggers a takeover:
+replay_state_match = 1.0  # fraction with identical sim state, RGB and proprio at tau
+baseline_replay_match = 1.0  # fraction whose replayed B continuation reproduces actions and outcome
+min_triggered_baseline_failures = 6  # triggered starts whose baseline episode fails
+min_expert_success = 0.8  # expert success_once over all triggered starts
+min_expert_success_on_failures = 0.75  # over triggered starts whose baseline fails

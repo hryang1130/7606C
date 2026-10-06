@@ -1,0 +1,29 @@
+# Round 2 reuses original train rollouts; holdout/tuning are fresh.
+# The separate round2 runner supplies validation seeds explicitly.
+[seeds]
+collection_train = [20000, 21000]
+collection_holdout = [32000, 32200]
+guidance_tuning = [33000, 33100]
+[collection]
+dataset_size = 150
+rollout_cap = 600
+holdout_episodes = 100
+pilot_holdout_episodes = 50
+failure_truncation_factor = 1.5
+low_success_min = 50
+[baseline_cell]
+min_val_success = 0.15
+max_val_success = 0.85
+val_seeds = [1, 2, 3, 4, 5]
+checkpoint_seeds = [1]
+[pilot]
+learning_rates = [1e-5]
+steps = [5000, 10000]
+relative_tie = 0.05
+[guidance]
+alpha_grid = [0.25, 0.5, 1.0]
+dry_run_episodes = 8
+tuning_episodes = 48
+tie_episodes = 2
+[evaluation]
+test_episodes = 100

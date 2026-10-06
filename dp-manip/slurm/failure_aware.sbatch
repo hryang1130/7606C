@@ -8,9 +8,12 @@
 # Usually the whole study is driven by scripts/failure_pipeline.py (see its
 # docstring for the smoke and study commands); single steps also work:
 #
-#   sbatch slurm/failure_aware.sbatch scripts/collect_rollouts.py collect "$RUN_ROOT/peginsertionside_rgb_unet_n100_s1/checkpoints/final.pt" --split train
+#   sbatch slurm/failure_aware.sbatch scripts/collect_rollouts.py collect "$RUN_ROOT/placesphere_rgb_unet_n100_s1/checkpoints/final.pt" --split train --max-episode-steps 200
 #   sbatch slurm/failure_aware.sbatch scripts/finetune_dp.py "$CKPT" --label failure --lr 1e-5 --steps 20000 --checkpoint-steps 5000 10000
-#   sbatch slurm/failure_aware.sbatch scripts/failure_study.py eval --task peginsertionside --split tuning --arm A
+#   sbatch slurm/failure_aware.sbatch scripts/failure_study.py eval --task placesphere --split tuning --arm A
+#
+# Collection must use the lock file's [task] max_episode_steps (plan §13);
+# record-collection refuses rollouts collected at another horizon.
 #
 # A fine-tune that checkpointed after the preemption signal exits 75; the job
 # is then requeued and continues from resume.pt.
@@ -18,7 +21,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=24:00:00
+# 18 h is the debug partition's MaxTime; a longer step is requeued and resumes.
+#SBATCH --time=18:00:00
 #SBATCH --signal=B:USR1@120
 #SBATCH --requeue
 #SBATCH --output=slurm-%x-%A.out

@@ -49,11 +49,21 @@ STRUCTURAL_KEYS = frozenset(
 )
 
 
+# The task data paths name their control mode (``{control_mode}`` in the task
+# files), so a control-mode experiment changes them together with its declared
+# variable. There they are part of the variable; in any other experiment they
+# are ordinary controls.
+CONTROL_MODE_VARIABLE = "task.control_mode"
+CONTROL_MODE_DERIVED_KEYS = frozenset({"data.train_path", "data.val_path"})
+
+
 def allowed_keys(spec: ExperimentSpec) -> set[str]:
     """Keys that may differ between cells of this experiment without drift."""
     allowed = {spec.variable, SEED_KEY, *RUNTIME_KEYS}
     if spec.variable == BACKBONE_VARIABLE:
         allowed |= STRUCTURAL_KEYS
+    if spec.variable == CONTROL_MODE_VARIABLE:
+        allowed |= CONTROL_MODE_DERIVED_KEYS
     return allowed
 
 

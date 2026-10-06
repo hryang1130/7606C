@@ -139,5 +139,15 @@
   finetune 去掉多余的 preload override。完成判断（`completion_state`）与 resume 检查改用
   `config.same_run`，忽略 `data.preload`，所以以前用懒读完成或中断的 run 仍算已完成、仍可续跑。
   Phase 0 manifest 升到 schema version 11。`--set data.preload=false` 仍可回到懒读。
+- Phase 22 已接入控制模式实验 `configs/experiments/control_mode.toml`：`variable = "task.control_mode"`、
+  `values = ["pd_joint_pos", "pd_ee_delta_pose"]`、种子 1–3、`[fixed] data.num_demos = 200`。六个 task 文件的
+  数据路径改用 `{control_mode}` 占位，由 `config.load` 在所有层之后按最终控制模式填入；改动前后六任务 ×
+  全部实验 cell 共 276 个 resolved config 与 run 名逐字节相同。Gate B 只在控制模式实验里把两个数据路径
+  视为变量的派生量；新控制模式加 run 名标签（`_eepose`），已有目录名不变，joint arm 就是 data-size
+  N=200 格子并直接复用。`tests/test_control_mode.py` 覆盖路径解析、未知占位符、run 名、矩阵 Gate B、
+  joint arm 与 data-size 格子相同、`[fixed]`/变量不可覆盖，以及 ee 数据（7 维动作）的
+  train → load → get_action 和导出控制模式不符时被拒。已知差异：数据加载在 episode 末尾重复最后一个动作，
+  对 delta 控制不是"静止"（官方 DP 对 delta 模式的手臂动作补 0）；四个 `pd_ee_delta_pos` 任务一直如此，
+  本次不改，以免 ee arm 同时改变两件事。评估上限仍为 300（N=200 子集中两种导出各只有 1 条示范超过 300 步）。
 - 本机没有项目的 ManiSkill/GPU 环境；完整数据检查与正式 GPU smoke 仍需在集群完成。
   本机临时 venv（torch/diffusers/h5py）仅用于 CPU 单元测试与合成数据 smoke，不是项目环境。

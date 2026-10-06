@@ -39,6 +39,8 @@ TASKS = (
     "pullcube",
     "peginsertionside",
     "plugcharger",
+    "placesphere",
+    "liftpegupright",
 )
 DEFAULT_EXPERIMENT = ROOT / "configs" / "experiments" / "data_size.toml"
 
@@ -204,6 +206,7 @@ def eval_command(
     num_envs: int | None = None,
     render_backend: str | None = None,
     python: str | None = None,
+    max_episode_steps: int | None = None,
 ) -> list[str]:
     """The one evaluation command for a declared run.
 
@@ -227,4 +230,8 @@ def eval_command(
         command.extend(("--num-envs", str(num_envs)))
     if render_backend is not None:
         command.extend(("--render-backend", render_backend))
+    if max_episode_steps is not None:
+        if max_episode_steps <= 0:
+            raise ValueError("max_episode_steps must be positive")
+        command.extend(("--max-episode-steps", str(max_episode_steps)))
     return command

@@ -1,0 +1,34 @@
+# Control-mode comparison: absolute joint targets vs end-effector delta pose.
+#
+# The experiment variable selects the action space. The task data paths name
+# their control mode ({control_mode} in configs/tasks), so each arm reads the
+# demonstrations exported in its own mode; Gate B treats those two paths as part
+# of the variable. Everything else resolves from the canonical baseline,
+# including the evaluation horizon (task.max_episode_steps), so the arms differ
+# only in task.control_mode and the data paths it names.
+#
+# Only PegInsertionSide has pd_ee_delta_pose demonstrations so far; submit it
+# with TASK=peginsertionside. The pd_joint_pos arm is that task's own mode, so
+# it is the data-size N=200 cell itself (same config, same run directory) and
+# is reused when its final.pt exists; pd_ee_delta_pose runs go to
+# ``<task>_rgb_unet_eepose_n200_s<seed>``.
+#
+# Both arms take the first 200 demos by ascending episode seed of their own
+# export. The two exports drop different failed replays, so their first-200
+# seed sets are not identical (186 shared for PegInsertionSide); report this
+# with the result.
+[experiment]
+name = "control_mode"
+variable = "task.control_mode"
+values = ["pd_joint_pos", "pd_ee_delta_pose"]
+
+[fixed]
+"data.num_demos" = 200
+
+[replicates]
+"pd_joint_pos" = [1, 2, 3]
+"pd_ee_delta_pose" = [1, 2, 3]
+
+[diagnostics]
+# Same shared overfitting diagnostic budget as the data-size grid.
+train_eval_episodes = 25

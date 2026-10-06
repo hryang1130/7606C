@@ -1,5 +1,9 @@
 # Layered RGB experiment configs
 
+默认 `task.obs_mode="rgb"`；`experiments/state_n100.toml` 显式选择完整 state，
+固定 N=100 / UNet / seed=1，并复用其余 baseline 设置。该单次诊断对照的集群入口见
+[PegInsertion state 说明](../docs/peginsertion-state.zh-CN.md)。
+
 正式入口按以下顺序解析，并将完整结果保存进 checkpoint：
 
 ```text
@@ -65,6 +69,31 @@ sbatch --export=ALL,TASK=peginsertionside,EXPERIMENT=configs/experiments/vision_
 ```
 
 `RUN_ROOT` 要与 data-size 轨道相同，avg arm 才会复用已有的 N=200 run。
+
+控制模式对比定义在 `experiments/control_mode.toml`：`variable = "task.control_mode"`、
+`values = ["pd_joint_pos", "pd_ee_delta_pose"]`，两个 arm 都用种子 1–3，`[fixed]` 把
+`data.num_demos` 固定为 200。task 文件里的数据路径用 `{control_mode}` 占位（例如
+`trajectory.state.{control_mode}.physx_cpu.h5`），在所有层合并之后按最终的 `task.control_mode`
+填入，所以换控制模式时会自动读取该模式导出的示范；task 自己的控制模式解析出来的路径与以前写死的
+字面路径逐字相同，已有 run 的 config 和名字都不变。其他占位符会直接报错；`--set data.train_path=...`
+这样显式覆盖路径仍然有效。Gate B 把 `data.train_path` / `data.val_path` 视为
+`task.control_mode` 的派生量：只在控制模式实验里允许它们不同，其他实验里仍是控制量。
+
+目前只有 PegInsertionSide 导出了 `pd_ee_delta_pose` 示范，所以只对它提交（`TASK=peginsertionside`）。
+`pd_joint_pos` arm 就是 data-size 的 N=200 格子（同 config、同目录），已有 `final.pt` 时直接复用；
+ee arm 的 run 名加 `_eepose`：`<task>_rgb_unet_eepose_n200_s<seed>`。评估回合上限
+（`task.max_episode_steps`）两个 arm 相同，沿用 task 配置。两个导出各自丢弃了不同的重放失败条目，
+按 seed 升序取的前 200 条并不完全相同（PegInsertionSide 共有 186 条），汇报结果时要说明。
+
+```bash
+# 先检查 ee 导出：schema、元数据里的控制模式、25 ⊂ 50 ⊂ 100 ⊂ 200 嵌套子集
+python scripts/inspect_dataset.py --config configs/tasks/peginsertionside.toml --data-root "$DATA_ROOT" \
+  --set task.control_mode=pd_ee_delta_pose
+python scripts/check_experiment.py --experiment control_mode --task peginsertionside
+python scripts/sweep.py show --experiment configs/experiments/control_mode.toml --task peginsertionside
+sbatch --export=ALL,TASK=peginsertionside,EXPERIMENT=configs/experiments/control_mode.toml,DATA_ROOT="$DATA_ROOT",RUN_ROOT=$RUN_ROOT \
+  slurm/train_dual_gpu.sbatch
+```
 
 `experiments/smoke.toml` 是集群 smoke 用的缩小网格（`policy.backbone` 三个 arm × seed 1），
 训练预算通过 `--set train.total_iters=...` 等运行时覆盖传入，不写进正式实验定义；
