@@ -1,4 +1,4 @@
-"""RGB-conditioned Diffusion Policy built on the shared observation encoder."""
+"""RGB- or state-conditioned Diffusion Policy using a shared training pipeline."""
 
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from .backbones import build_noise_predictor
 from .config import DiffusionConfig, PolicyConfig, VisionConfig, from_recorded
 from .data import NormalizationStats
-from .observation_encoder import ObservationEncoder
+from .observation_encoder import ObservationEncoder, StateObservationEncoder
 
 
 class DiffusionPolicy(nn.Module):
-    """Encode RGB + proprioception and denoise a normalized action sequence."""
+    """Encode the selected observation mode and denoise normalized actions."""
 
     def __init__(
         self,
@@ -24,10 +24,11 @@ class DiffusionPolicy(nn.Module):
         vision_cfg: VisionConfig,
         diffusion_cfg: DiffusionConfig,
         *,
-        image_shape: tuple[int, int, int],
+        image_shape: tuple[int, int, int] | None,
         proprio_dim: int,
         action_dim: int,
         stats: NormalizationStats,
+        obs_mode: str = "rgb",
     ):
         super().__init__()
         self.obs_horizon = policy_cfg.obs_horizon
@@ -35,13 +36,25 @@ class DiffusionPolicy(nn.Module):
         self.pred_horizon = policy_cfg.pred_horizon
         self.action_dim = action_dim
         self.num_inference_iters = diffusion_cfg.num_inference_iters
-        self.observation_encoder = ObservationEncoder(
-            vision_cfg,
-            obs_horizon=policy_cfg.obs_horizon,
-            image_shape=image_shape,
-            proprio_dim=proprio_dim,
-            stats=stats,
-        )
+        self.obs_mode = obs_mode
+        if obs_mode == "state":
+            if image_shape is not None:
+                raise ValueError("state policy expects no image shape")
+            self.observation_encoder = StateObservationEncoder(
+                obs_horizon=policy_cfg.obs_horizon, state_dim=proprio_dim, stats=stats
+            )
+        elif obs_mode == "rgb":
+            if image_shape is None:
+                raise ValueError("RGB policy requires an image shape")
+            self.observation_encoder = ObservationEncoder(
+                vision_cfg,
+                obs_horizon=policy_cfg.obs_horizon,
+                image_shape=image_shape,
+                proprio_dim=proprio_dim,
+                stats=stats,
+            )
+        else:
+            raise ValueError("obs_mode must be rgb or state")
         # The backbone consumes the shared ``(B, To, Dobs)`` sequence and decides
         # how to condition on it; the policy itself is backbone-agnostic.
         self.noise_predictor = build_noise_predictor(
@@ -77,14 +90,18 @@ class DiffusionPolicy(nn.Module):
         """
         cfg = from_recorded(checkpoint["config"])
         train_data = checkpoint["train_data"]
+        if train_data.get("obs_mode", "rgb") != cfg.task.obs_mode:
+            raise ValueError("checkpoint observation mode differs from dataset metadata")
+        image_shape = train_data["image_shape"]
         policy = cls(
             cfg.policy,
             cfg.vision,
             cfg.diffusion,
-            image_shape=tuple(train_data["image_shape"]),
+            image_shape=tuple(image_shape) if image_shape is not None else None,
             proprio_dim=int(train_data["proprio_dim"]),
             action_dim=int(train_data["action_dim"]),
             stats=NormalizationStats.from_dict(checkpoint["normalization"]),
+            obs_mode=cfg.task.obs_mode,
         )
         load_policy_state_dict(policy, checkpoint["model"])
         return policy.to(device)
@@ -92,13 +109,13 @@ class DiffusionPolicy(nn.Module):
     def unnormalize_action(self, action: torch.Tensor) -> torch.Tensor:
         return (action + 1.0) * 0.5 * (self.action_high - self.action_low) + self.action_low
 
-    def observation_features(self, rgb: torch.Tensor, proprio: torch.Tensor) -> torch.Tensor:
+    def observation_features(self, rgb: torch.Tensor | None, proprio: torch.Tensor) -> torch.Tensor:
         """Return shared observation features shaped ``(B, To, Dobs)``."""
         return self.observation_encoder(rgb, proprio)
 
     def compute_loss(
         self,
-        rgb: torch.Tensor,
+        rgb: torch.Tensor | None,
         proprio: torch.Tensor,
         actions: torch.Tensor,
         *,
@@ -121,7 +138,7 @@ class DiffusionPolicy(nn.Module):
     @torch.no_grad()
     def get_action(
         self,
-        rgb: torch.Tensor,
+        rgb: torch.Tensor | None,
         proprio: torch.Tensor,
         *,
         generator: torch.Generator | None = None,

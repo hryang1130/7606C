@@ -1,0 +1,12 @@
+[task]
+name = "placesphere"
+env_id = "PlaceSphere-v1"
+control_mode = "pd_ee_delta_pos"
+# Demonstrations are 90-150 steps (median 113); the registered default of 50 cut every
+# evaluation short. Runs trained before 2026-10-03 record 50 and are evaluated with
+# eval_dp.py --max-episode-steps 200 (results eval/*_final_h200.json).
+max_episode_steps = 200
+
+[data]
+train_path = "train/PlaceSphere-v1/motionplanning/trajectory.state.{control_mode}.physx_cpu.h5"
+val_path = "val/PlaceSphere-v1/motionplanning/trajectory.state.{control_mode}.physx_cpu.h5"

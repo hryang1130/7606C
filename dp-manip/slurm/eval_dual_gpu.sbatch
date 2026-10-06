@@ -34,6 +34,10 @@ PYTHON=${PYTHON:-.venv/bin/python}
 CHECKPOINT=${CHECKPOINT:-final.pt}
 SPLIT=${SPLIT:-test}
 NUM_ENVS=${NUM_ENVS:-4}
+extra_args=()
+if [[ -n "${MAX_EPISODE_STEPS:-}" ]]; then
+  extra_args+=(--max-episode-steps "$MAX_EPISODE_STEPS")
+fi
 
 echo "task=$TASK experiment=$EXPERIMENT run_root=$RUN_ROOT checkpoint=$CHECKPOINT split=$SPLIT num_envs=$NUM_ENVS python=$PYTHON"
 
@@ -43,7 +47,7 @@ echo "task=$TASK experiment=$EXPERIMENT run_root=$RUN_ROOT checkpoint=$CHECKPOIN
   --output-root "$RUN_ROOT" \
   --checkpoint "$CHECKPOINT" \
   --split "$SPLIT" \
-  --num-envs "$NUM_ENVS" &
+  --num-envs "$NUM_ENVS" "${extra_args[@]}" &
 evaluation_pid=$!
 trap 'kill -USR1 "$evaluation_pid" 2>/dev/null || true' USR1 TERM
 while true; do

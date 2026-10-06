@@ -37,10 +37,20 @@ else:
     HAVE_TORCH = True
 
 ROOT = Path(__file__).resolve().parents[1]
-TASK = "peginsertionside"
+TASK = "placesphere"
+# The study task and its planned replication (plan §12); the end-to-end study
+# runs on both so that neither depends on a task-specific path.
+STUDY_TASKS = ("placesphere", "liftpegupright")
+# Synthetic shapes, not PlaceSphere's. The pipeline test expects this data to
+# fail the offline gate; changing the shapes changes the random data.
 PROPRIO_DIM = 5
 ACTION_DIM = 8
+# The study horizon. The synthetic baselines record a horizon too short for any
+# success (fake successes start at step 3), like PlaceSphere's checkpoints
+# recording 50 steps; the study only works if every stage applies the lock's
+# horizon (plan §13).
 MAX_STEPS = 12
+RECORDED_STEPS = 2
 
 
 def load_script(name: str):
@@ -92,6 +102,26 @@ class RuleTest(unittest.TestCase):
             pick([0.1, 0.1], None, low=0.15, high=0.85)
         with self.assertRaisesRegex(ValueError, "too few failures"):
             pick([0.9, 0.95], None, low=0.15, high=0.85)
+
+    def test_validation_results_are_read_at_the_study_horizon(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_root = Path(directory)
+            for seed, success in ((1, 0.2), (2, 0.4)):
+                results = study.baseline_run_dir(run_root, TASK, 100, seed) / "eval"
+                results.mkdir(parents=True)
+                (results / "val_final.json").write_text(json.dumps({"summary": {"success_once": 0.0}}))
+                (results / "val_final_h200.json").write_text(
+                    json.dumps({"summary": {"success_once": success}, "max_episode_steps": 200})
+                )
+            self.assertEqual(study.read_val_success(run_root, TASK, 100, [1, 2]), [0.0, 0.0])
+            self.assertEqual(study.read_val_success(run_root, TASK, 100, [1, 2], 200), [0.2, 0.4])
+            self.assertIsNone(study.read_val_success(run_root, TASK, 100, [1, 2], 150))
+            self.assertIsNone(study.read_val_success(run_root, TASK, 200, [1, 2], 200))
+            (results / "val_final_h200.json").write_text(
+                json.dumps({"summary": {"success_once": 0.4}, "max_episode_steps": 50})
+            )
+            with self.assertRaisesRegex(ValueError, "evaluated at 50 steps, not 200"):
+                study.read_val_success(run_root, TASK, 100, [1, 2], 200)
 
     def test_pilot_prefers_fewer_steps_then_lower_lr_within_the_tie(self) -> None:
         candidates = [
@@ -204,10 +234,14 @@ test_episodes = 8
 
 
 class FakeEnv:
-    """Even reset seeds succeed from the third step on; odd seeds never do."""
+    """Even reset seeds succeed from the third step on; odd seeds never do.
 
-    def __init__(self, num_envs: int):
+    Episodes are truncated at ``max_steps``, the config's ``max_episode_steps``.
+    """
+
+    def __init__(self, num_envs: int, max_steps: int = MAX_STEPS):
         self.num_envs = num_envs
+        self.max_steps = max_steps
 
     def _observation(self):
         rng = np.random.default_rng([*self.seeds, self.t])
@@ -224,7 +258,7 @@ class FakeEnv:
         assert np.asarray(action).shape == (self.num_envs, ACTION_DIM)
         self.t += 1
         success = np.array([seed % 2 == 0 and self.t >= 3 for seed in self.seeds])
-        truncated = np.full(self.num_envs, self.t >= MAX_STEPS)
+        truncated = np.full(self.num_envs, self.t >= self.max_steps)
         reward = np.asarray(action).sum(axis=1)
         return self._observation(), reward, np.zeros(self.num_envs, bool), truncated, {"success": success}
 
@@ -233,10 +267,10 @@ class FakeEnv:
 
 
 def fake_envs(cfg, num_envs, render_backend):
-    return FakeEnv(num_envs)
+    return FakeEnv(num_envs, cfg.task.max_episode_steps)
 
 
-def write_expert(path: Path, seeds: list[int]) -> None:
+def write_expert(path: Path, seeds: list[int], env_id: str, control_mode: str) -> None:
     rng = np.random.default_rng(0)
     path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(path, "w") as file:
@@ -248,20 +282,21 @@ def write_expert(path: Path, seeds: list[int]) -> None:
     path.with_suffix(".json").write_text(
         json.dumps(
             {
-                "env_info": {"env_id": "PegInsertionSide-v1", "env_kwargs": {"control_mode": "pd_joint_pos"}},
+                "env_info": {"env_id": env_id, "env_kwargs": {"control_mode": control_mode}},
                 "episodes": [{"episode_id": index, "episode_seed": seed} for index, seed in enumerate(seeds)],
             }
         )
     )
 
 
-def train_baselines(root: Path, run_root: Path, seeds=(1, 2)) -> dict[int, Path]:
-    """Tiny main-track baselines named like the N=100 cell, with validation results."""
+def train_baselines(root: Path, run_root: Path, seeds=(1, 2), task: str = TASK) -> dict[int, Path]:
+    """Tiny main-track baselines named like the N=100 cell, recording ``RECORDED_STEPS``,
+    with validation results evaluated at ``MAX_STEPS`` (``eval_dp.py --max-episode-steps``)."""
     data_root = root / "data"
     checkpoints = {}
     for seed in seeds:
         cfg = config_lib.load(
-            str(ROOT / "configs" / "tasks" / f"{TASK}.toml"),
+            str(ROOT / "configs" / "tasks" / f"{task}.toml"),
             [
                 f"data.root={json.dumps(str(data_root))}",
                 "data.num_demos=4", "data.val_num_demos=1",
@@ -270,26 +305,37 @@ def train_baselines(root: Path, run_root: Path, seeds=(1, 2)) -> dict[int, Path]
                 "train.total_iters=2", "train.batch_size=2", "train.num_workers=0", "train.log_freq=100",
                 "train.validation_steps=[2]", "train.checkpoint_steps=[]", "train.amp=false",
                 "ema.decay=0.9", "eval.num_envs=2", "eval.test_episodes=8", f"train.seed={seed}",
+                f"task.max_episode_steps={MAX_STEPS}",
             ],
         )
         if not (data_root / cfg.data.train_path).is_file():
-            write_expert(data_root / cfg.data.train_path, [0, 1, 2, 3])
-            write_expert(data_root / cfg.data.val_path, [4000])
-        name = f"{TASK}_rgb_unet_n100_s{seed}"
+            env = (cfg.task.env_id, cfg.task.control_mode)
+            write_expert(data_root / cfg.data.train_path, [0, 1, 2, 3], *env)
+            write_expert(data_root / cfg.data.val_path, [4000], *env)
+        name = f"{task}_rgb_unet_n100_s{seed}"
         assert run_training(cfg, output_root=run_root, run_name=name, device="cpu") == 0
         (run_root / name / "eval").mkdir()
-        (run_root / name / "eval" / "val_final.json").write_text(json.dumps({"summary": {"success_once": 0.4}}))
+        (run_root / name / "eval" / f"val_final_h{MAX_STEPS}.json").write_text(
+            json.dumps({"summary": {"success_once": 0.4}, "max_episode_steps": MAX_STEPS})
+        )
         checkpoints[seed] = run_root / name / "checkpoints" / "final.pt"
+        # Training refuses a horizon shorter than the demonstrations, so the
+        # short horizon recorded by PlaceSphere's pre-2026-10-03 checkpoints is
+        # written into the checkpoint afterwards.
+        payload = torch.load(checkpoints[seed], map_location="cpu", weights_only=False)
+        payload["config"]["task"]["max_episode_steps"] = RECORDED_STEPS
+        torch.save(payload, checkpoints[seed])
     return checkpoints
 
 
 @unittest.skipUnless(HAVE_TORCH, "requires the cluster torch environment")
 class StudyEndToEndTest(unittest.TestCase):
     def test_full_study_on_synthetic_data(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            self.run_study(Path(directory))
+        for task in STUDY_TASKS:
+            with self.subTest(task=task), tempfile.TemporaryDirectory() as directory:
+                self.run_study(Path(directory), task)
 
-    def run_study(self, root: Path) -> None:
+    def run_study(self, root: Path, task: str) -> None:
         collect = load_script("collect_rollouts")
         finetune = load_script("finetune_dp")
         cli = load_script("failure_study")
@@ -297,7 +343,7 @@ class StudyEndToEndTest(unittest.TestCase):
         protocol_path.write_text(PROTOCOL)
         lock_path = root / "lock.toml"
         run_root = root / "runs"
-        common = ["--task", TASK, "--lock", str(lock_path), "--protocol", str(protocol_path)]
+        common = ["--task", task, "--lock", str(lock_path), "--protocol", str(protocol_path)]
 
         def stage(*arguments: str) -> None:
             self.assertEqual(cli.main([*arguments, *common], envs_factory=fake_envs), 0)
@@ -305,19 +351,35 @@ class StudyEndToEndTest(unittest.TestCase):
         def locked(section: str):
             return LockFile(lock_path).get(section)
 
-        checkpoints = train_baselines(root, run_root)
+        checkpoints = train_baselines(root, run_root, task=task)
 
-        stage("select-cell", "--run-root", str(run_root))
+        stage("select-cell", "--run-root", str(run_root), "--max-episode-steps", str(MAX_STEPS))
         self.assertEqual(locked("task.num_demos"), 100)
+        self.assertEqual(locked("task.max_episode_steps"), MAX_STEPS)
 
+        horizon = ["--max-episode-steps", str(MAX_STEPS)]
         for seed, checkpoint in checkpoints.items():
             for split in ("train", "holdout"):
                 collect.main(
-                    ["collect", str(checkpoint), "--split", split, "--protocol", str(protocol_path), "--device", "cpu"],
+                    ["collect", str(checkpoint), "--split", split, "--protocol", str(protocol_path),
+                     "--device", "cpu", *horizon],
                     envs_factory=fake_envs,
                 )
-            rollout = run_root / "failure_aware" / TASK / f"s{seed}"
+            rollout = run_root / "failure_aware" / task / f"s{seed}"
             collect.main(["build", str(rollout), "--protocol", str(protocol_path)])
+            provenance = json.loads((rollout / "raw_train.json").read_text())["rollout_provenance"]
+            self.assertEqual(
+                (provenance["max_episode_steps"], provenance["checkpoint_max_episode_steps"]),
+                (MAX_STEPS, RECORDED_STEPS),
+            )
+            if seed == 1:
+                # A collection at another horizon is refused.
+                summary_path = rollout / "datasets" / "summary.json"
+                original = summary_path.read_text()
+                summary_path.write_text(json.dumps({**json.loads(original), "max_episode_steps": RECORDED_STEPS}))
+                with self.assertRaisesRegex(ValueError, "the locked horizon is 12"):
+                    stage("record-collection", "--seed", "1")
+                summary_path.write_text(original)
             stage("record-collection", "--seed", str(seed))
         self.assertEqual(locked("collection.s1.train_rollouts"), 4)
 
@@ -381,6 +443,9 @@ class StudyEndToEndTest(unittest.TestCase):
                 self.assertEqual([episode["seed"] for episode in result["episodes"]], test_seeds)
                 self.assertEqual(result["arm"]["base_sha256"], locked(f"checkpoints.s{seed}.sha256"))
                 self.assertEqual(result["lock"]["sha256"], lock.sha256)
+                self.assertEqual(
+                    (result["max_episode_steps"], result["checkpoint_max_episode_steps"]), (MAX_STEPS, RECORDED_STEPS)
+                )
                 if arm in ("F", "A", "C1"):
                     self.assertIn(result["arm"]["mode"], ("fixed", "adaptive"))
                     self.assertTrue(result["arm"]["negative_sha256"])

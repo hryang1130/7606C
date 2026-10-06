@@ -19,6 +19,7 @@ class TaskConfig:
     max_episode_steps: int
     sim_backend: str
     shader_pack: str
+    obs_mode: str = "rgb"
 
 
 @dataclass
@@ -129,6 +130,8 @@ class Config:
     eval: EvalConfig
 
     def validate(self) -> None:
+        if self.task.obs_mode not in ("rgb", "state"):
+            raise ValueError("task.obs_mode must be rgb or state")
         if self.task.sim_backend != "physx_cpu":
             raise ValueError("evaluation must use physx_cpu to match the generated demonstrations")
         if (
@@ -244,13 +247,22 @@ def default_run_name(cfg: Config) -> str:
     task, data size, and seed never share a run directory. A non-default vision
     pool adds a tag (``_ss32`` for a 32-keypoint spatial softmax); average
     pooling adds none, so existing run directories keep their names and the
-    avg arm of a pooling comparison reuses the matching baseline run.
+    avg arm of a pooling comparison reuses the matching baseline run. A control
+    mode no task file declares adds a tag the same way (``_eepose``).
     """
-    pool = "" if cfg.vision.pool == "avg" else f"_ss{cfg.vision.num_keypoints}"
+    pool = "" if cfg.task.obs_mode == "state" or cfg.vision.pool == "avg" else f"_ss{cfg.vision.num_keypoints}"
+    control = _CONTROL_MODE_TAGS.get(cfg.task.control_mode, "")
     return (
-        f"{cfg.task.name}_rgb_{cfg.policy.backbone}{pool}"
+        f"{cfg.task.name}_{cfg.task.obs_mode}_{cfg.policy.backbone}{pool}{control}"
         f"_n{cfg.data.num_demos}_s{cfg.train.seed}"
     )
+
+
+# Run-name tags of control modes no task file declares. The modes the tasks
+# already use (pd_ee_delta_pos, pd_joint_pos) get none, so every existing run
+# directory keeps its name and a control-mode comparison reuses the task's own
+# baseline runs.
+_CONTROL_MODE_TAGS = {"pd_ee_delta_pose": "_eepose"}
 
 
 @dataclass(frozen=True)
@@ -334,6 +346,7 @@ def _adapt_legacy_config(raw: dict[str, Any]) -> dict[str, Any]:
 # a field existed actually trained with. They are applied only by
 # ``from_recorded``; fresh configs must get every value from baseline.toml.
 _HISTORICAL_VALUES: dict[tuple[str, str], Any] = {
+    ("task", "obs_mode"): "rgb",
     # Before Phase 7 the UNet was the only noise predictor.
     ("policy", "backbone"): "unet",
     # Before Phases 9-11 the backbone structure fields did not exist; they only
@@ -625,7 +638,35 @@ def load(
                 "edit the experiment spec instead of overriding it"
             )
         _set_dotted(raw, key, value)
+    _resolve_data_paths(raw)
     return from_dict(raw)
+
+
+# Task data paths name their control mode as ``{control_mode}``. It is filled
+# from the resolved task.control_mode after every layer, so an experiment that
+# changes the control mode also reads that mode's demonstrations, while the
+# task's own mode resolves to the same literal paths runs recorded before.
+_CONTROL_MODE_PLACEHOLDER = "{control_mode}"
+_DATA_PATH_KEYS = ("train_path", "val_path")
+
+
+def _resolve_data_paths(raw: dict[str, Any]) -> None:
+    data = raw.get("data")
+    if not isinstance(data, dict):
+        return
+    task = raw.get("task")
+    mode = task.get("control_mode") if isinstance(task, dict) else None
+    for key in _DATA_PATH_KEYS:
+        value = data.get(key)
+        if not isinstance(value, str):
+            continue
+        if _CONTROL_MODE_PLACEHOLDER in value:
+            if not isinstance(mode, str) or not mode:
+                raise ValueError(f"data.{key} names {{control_mode}} but task.control_mode is not set")
+            value = value.replace(_CONTROL_MODE_PLACEHOLDER, mode)
+        if "{" in value or "}" in value:
+            raise ValueError(f"data.{key} has an unknown placeholder: {value!r}")
+        data[key] = value
 
 
 def data_root_override(data_root: str | Path) -> str:

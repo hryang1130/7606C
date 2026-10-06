@@ -5,5 +5,5 @@ control_mode = "pd_joint_pos"
 max_episode_steps = 300
 
 [data]
-train_path = "train/PegInsertionSide-v1/motionplanning/trajectory.state.pd_joint_pos.physx_cpu.h5"
-val_path = "val/PegInsertionSide-v1/motionplanning/trajectory.state.pd_joint_pos.physx_cpu.h5"
+train_path = "train/PegInsertionSide-v1/motionplanning/trajectory.state.{control_mode}.physx_cpu.h5"
+val_path = "val/PegInsertionSide-v1/motionplanning/trajectory.state.{control_mode}.physx_cpu.h5"

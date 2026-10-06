@@ -1,0 +1,16 @@
+# Diagnostic: complete state, N=100, one training seed. All other settings
+# (including the 100k-step budget and CPU physics) come from the RGB baseline.
+[experiment]
+name = "state_n100"
+variable = "task.obs_mode"
+values = ["state"]
+
+[fixed]
+"data.num_demos" = 100
+"policy.backbone" = "unet"
+
+[replicates]
+"state" = [1]
+
+[diagnostics]
+train_eval_episodes = 25

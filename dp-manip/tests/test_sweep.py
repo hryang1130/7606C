@@ -80,8 +80,18 @@ class SweepTest(unittest.TestCase):
         module = load_sweep_module()
         data_size = ROOT / "configs" / "experiments" / "data_size.toml"
         backbone = ROOT / "configs" / "experiments" / "backbone.toml"
-        self.assertEqual(len(module.runs(data_size)), 96)
-        self.assertEqual(len(module.runs(backbone)), 90)
+        self.assertEqual(len(module.runs(data_size)), 128)
+        self.assertEqual(len(module.runs(backbone)), 120)
+        original_tasks = (
+            "pickcube", "stackcube", "pushcube", "pullcube",
+            "peginsertionside", "plugcharger",
+        )
+        self.assertEqual(module.TASKS[:6], original_tasks)
+        for experiment, old_count in ((data_size, 96), (backbone, 90)):
+            original_runs = [
+                run for task in original_tasks for run in module.runs(experiment, task=task)
+            ]
+            self.assertEqual(module.runs(experiment)[:old_count], original_runs)
 
     def test_task_filter_keeps_the_declared_order(self) -> None:
         module = load_sweep_module()

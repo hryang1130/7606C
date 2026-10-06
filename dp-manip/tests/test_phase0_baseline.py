@@ -4,7 +4,7 @@ import json
 import unittest
 from pathlib import Path
 
-from dp_manip.config import load
+from dp_manip.config import from_recorded, load
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ class PhaseZeroBaselineTest(unittest.TestCase):
     def test_canonical_config_matches_frozen_reference(self) -> None:
         reference = json.loads(MANIFEST.read_text(encoding="utf-8"))
         resolved = load(ROOT / "configs" / "tasks" / "pickcube.toml")
-        self.assertEqual(resolved.to_dict(), reference["canonical_config"])
+        self.assertEqual(resolved, from_recorded(reference["canonical_config"]))
 
     def test_regression_override_matches_captured_budget(self) -> None:
         reference = json.loads(MANIFEST.read_text(encoding="utf-8"))

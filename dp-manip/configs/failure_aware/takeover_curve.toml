@@ -1,0 +1,53 @@
+# Mechanism check and data "exchange-rate" curve for the takeover-correction
+# study (configs/failure_aware/takeover_correction.toml). Written before any
+# run of either experiment; scripts/takeover_curve.py records this file's
+# sha256 and writes every evaluation and the decision once.
+
+[source]
+correction_config = "configs/failure_aware/takeover_correction.toml"
+correction_config_sha256 = "c3af6f8fc5849f208bd764dabce0d33096d39986f6f22faefdeab1076bf101d0"
+# Output root of the finished correction study: collected corrections, the
+# arm B/C/D models and their evaluations are read from here, never rewritten.
+correction_output = "/userhome/cs5/u3684139/dp-runs-placesphere-takeover/correction"
+
+[curve]
+# New fine-tuning points per checkpoint, all with the correction study's
+# [finetune] settings, data root and evaluation seeds (paired with B/C/D):
+#   C<k>: base 100 demos + the first k corrections in seed order
+#   D<n>: base 100 demos + the next n demos in seed order (300 = whole pool)
+# Existing points reused: B (0), C (=C100), D (=D63, window-matched to C).
+corrections = [25, 50]
+extra_demos = [150, 300]
+# Disk: delete a new model's resume.pt once its final.pt exists.
+drop_resume = true
+
+[mechanism]
+# Episode metrics from proprioception only (qpos 7-8 fingers, column 18
+# is_grasped), so the evaluation loop and its results stay unchanged; B, C and
+# D are re-evaluated and must reproduce their recorded episodes exactly.
+# "Missed grasp" mirrors the v2 trigger without the sphere-height check (not
+# observable from proprio): at a chunk boundary, finger width below
+# max_finger_width for closed_window states and no grasp for ungrasped_window
+# states. A miss counts if it happens before the first success.
+act_horizon = 8
+closed_window = 4
+max_finger_width = 0.02
+ungrasped_window = 8
+stable_grasp_window = 16  # consecutive grasped states = "stable grasp"
+
+[analysis]
+bootstrap_samples = 10000
+bootstrap_seed = 0
+# Two-level paired bootstrap (checkpoints, then evaluation seeds), as before.
+# Curve questions, all relative to B on the same seeds:
+#   Q1  D300 - B interval above 0      -> extra demos do help under this fine-tuning
+#       D150 and D300 intervals contain 0 -> this fine-tuning does not absorb up
+#                                          to +300 demos; C vs D then says little
+#                                          about demos in general
+#   Q2  C25, C50 - B                   -> how the gain grows with corrections
+#   Q3  descriptive exchange rate: success against added trainable windows for
+#       the C and D series
+# Mechanism questions, C vs B (D reported alongside):
+#   M1  paired difference in "missed and never succeeded" (failure through a
+#       missed grasp); interval below 0 -> corrections cut miss-caused failures
+#   M2  descriptive: miss rate, success rate after a miss, failure stage split

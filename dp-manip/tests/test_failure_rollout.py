@@ -41,9 +41,9 @@ from dp_manip.failure_protocol import DEFAULT_PROTOCOL, load_protocol
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "configs" / "tasks"
-# The study runs on PegInsertionSide; PlugCharger is the planned extension and
+# The study runs on PlaceSphere; LiftPegUpright is the planned replication and
 # must keep working through the same code (plan §12.1).
-STUDY_TASKS = ("peginsertionside", "plugcharger")
+STUDY_TASKS = ("placesphere", "liftpegupright")
 
 IMAGE = (4, 4, 6)
 PROPRIO_DIM = 3

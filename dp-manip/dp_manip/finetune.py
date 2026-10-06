@@ -39,6 +39,9 @@ class FinetuneSpec:
     lr_schedule: str
     train_seed_range: tuple[int, int]
     val_seed_range: tuple[int, int]
+    # False for datasets that mix expert demonstrations with the checkpoint's own
+    # takeover corrections; their entry point checks provenance itself.
+    require_rollout_source: bool = True
 
     def __post_init__(self) -> None:
         if self.lr_schedule not in LR_SCHEDULES:
@@ -50,7 +53,10 @@ class FinetuneSpec:
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-shaped record (tuples become lists), comparable with ``run.json``."""
-        return json.loads(json.dumps(dataclasses.asdict(self)))
+        record = json.loads(json.dumps(dataclasses.asdict(self)))
+        if record["require_rollout_source"]:
+            del record["require_rollout_source"]  # records written before the field existed
+        return record
 
 
 def check_locked_sections(cfg: Config, baseline: Config) -> None:

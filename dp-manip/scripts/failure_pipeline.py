@@ -15,13 +15,19 @@ pause, a preemption (exit 75, requeued by slurm/failure_aware.sbatch) or a
 crash. The study and a smoke run differ only in their arguments:
 
     # smoke: scaled-down protocol, scratch lock file and rollout root
-    sbatch slurm/failure_aware.sbatch scripts/failure_pipeline.py --task peginsertionside \\
-      --run-root "$RUN_ROOT" --protocol configs/failure_aware/smoke_protocol.toml \\
-      --lock "$SCRATCH/smoke/peginsertionside.toml" --rollout-root "$SCRATCH/smoke" \\
+    sbatch slurm/failure_aware.sbatch scripts/failure_pipeline.py --task placesphere \\
+      --run-root "$RUN_ROOT" --max-episode-steps 200 --protocol configs/failure_aware/smoke_protocol.toml \\
+      --lock "$SCRATCH/smoke/placesphere.toml" --rollout-root "$SCRATCH/smoke" \\
       --budget-confirmed --include-test
 
     # study
-    sbatch slurm/failure_aware.sbatch scripts/failure_pipeline.py --task peginsertionside --run-root "$RUN_ROOT"
+    sbatch slurm/failure_aware.sbatch scripts/failure_pipeline.py --task placesphere --run-root "$RUN_ROOT" \\
+      --max-episode-steps 200
+
+``--max-episode-steps`` is locked by select-cell on the first run; later runs
+may omit it, and a value that differs from the lock is refused. The replication
+task (plan §12) adds ``--no-low-success``, so it stops when its baseline is
+outside the band instead of running in low-success mode.
 """
 
 from __future__ import annotations
@@ -61,6 +67,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--task", required=True)
     parser.add_argument("--run-root", type=Path, required=True, help="main-track run root (baseline cells)")
     parser.add_argument("--rollout-root", type=Path, help="root of failure_aware/<task>/ (default: --run-root)")
+    parser.add_argument(
+        "--max-episode-steps",
+        type=study_cli.positive_int,
+        help="study horizon passed to select-cell (plan §1, §13); default: the checkpoints' recorded one",
+    )
+    parser.add_argument(
+        "--no-low-success",
+        action="store_true",
+        help="passed to select-cell: stop if no baseline cell is in the band (plan §12.3, replication task)",
+    )
     parser.add_argument("--protocol", type=Path, default=DEFAULT_PROTOCOL)
     parser.add_argument("--lock", type=Path, help="default: configs/failure_aware/<task>.toml (study protocol only)")
     parser.add_argument("--device", default="cuda")
@@ -123,6 +139,9 @@ class Pipeline:
             "collect", checkpoint, "--split", split, "--protocol", str(self.protocol.path),
             "--run-root", str(self.rollout_root), "--device", self.args.device, *self.render,
         ]
+        horizon = study.study_horizon(self.lock)
+        if horizon is not None:
+            argv += ["--max-episode-steps", str(horizon)]
         collect_rollouts.main([*argv, *(["--overwrite"] if overwrite else [])], envs_factory=self.envs_factory)
 
     def finetune(self, checkpoint: str, label: str, lr: float, steps: int, extra_steps=()) -> None:
@@ -143,7 +162,17 @@ class Pipeline:
     def run(self) -> int:
         if not self.lock.has("task"):
             print("== select-cell")
-            self.study("select-cell", "--run-root", str(self.args.run_root), "--rollout-root", str(self.rollout_root))
+            horizon = self.args.max_episode_steps
+            self.study(
+                "select-cell", "--run-root", str(self.args.run_root), "--rollout-root", str(self.rollout_root),
+                *(["--max-episode-steps", str(horizon)] if horizon is not None else []),
+                *(["--no-low-success"] if self.args.no_low_success else []),
+            )
+        locked_horizon = study.study_horizon(self.lock)
+        if self.args.max_episode_steps is not None and self.args.max_episode_steps != locked_horizon:
+            raise ValueError(
+                f"the lock file's horizon is {locked_horizon}, not --max-episode-steps {self.args.max_episode_steps}"
+            )
         locked_root = self.lock.require("task", "select-cell").get("rollout_root")
         if locked_root is None or Path(locked_root).resolve() != self.rollout_root:
             raise ValueError(f"the lock file's rollout root is {locked_root}, not {self.rollout_root}")
