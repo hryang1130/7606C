@@ -1,0 +1,26 @@
+== pickcube_rgb_unet_n100_s1
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+number of parameters: 69.71M
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+wrote /userhome/cs5/u3684238/dp-runs-pickcube/pickcube_rgb_unet_n100_s1/gripper_trace_test_final.json
+== pickcube_rgb_transformer_n100_s1
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+/userhome/cs5/u3684238/7606C/dp-manip/.venv/lib/python3.11/site-packages/sapien/_vulkan_tricks.py:42: UserWarning: Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.
+  warn("Failed to find system libvulkan. Fallback to SAPIEN builtin libvulkan.")
+wrote /userhome/cs5/u3684238/dp-runs-pickcube/pickcube_rgb_transformer_n100_s1/gripper_trace_test_final.json
+ALL DONE Wed Oct  7 16:10:41 HKT 2026
