@@ -23,7 +23,8 @@ MUTED = "#898781"
 GRID = "#e1e0d9"
 AXIS = "#c3c2b7"
 
-TASK_COLOR = {  # categorical slots 1-5, fixed order
+TASK_COLOR = {  # categorical slots 1-6, fixed order
+    "PullCube": "#7d4fc2",
     "PushCube": "#2a78d6",
     "PickCube": "#eb6834",
     "StackCube": "#1baf7a",
@@ -77,22 +78,32 @@ DATA_SIZE = {
         100: mean_sd([0.96, 0.96, 0.94, 0.95, 0.93]),
         200: mean_sd([0.94, 0.97, 0.97, 0.98, 0.94]),
     },
+    "PullCube": {  # per-seed values from the PullCube Task 4 report (pullcube_test_results.csv)
+        25: mean_sd([0.78, 0.76, 0.76]),
+        50: mean_sd([0.91, 0.91, 0.92]),
+        100: mean_sd([0.96, 0.96, 0.94, 0.96, 0.96]),
+        200: mean_sd([0.97, 0.97, 0.98, 0.97, 0.97]),
+    },
     "LiftPegUpright": {25: (0.070, 0.010), 50: (0.363, 0.031), 100: (0.674, 0.021),
                        200: (0.748, 0.028), 400: (0.792, 0.008)},
-    "StackCube": {25: (0.017, 0.012), 50: (0.123, 0.025), 100: (0.410, 0.029), 200: (0.660, 0.031)},
+    "StackCube": {25: (0.017, 0.012), 50: (0.123, 0.025), 100: (0.410, 0.029), 200: (0.660, 0.031),
+                  400: (0.832, 0.019)},
     "PlaceSphere": {25: (0.047, 0.029), 50: (0.253, 0.041), 100: (0.360, 0.036), 200: (0.766, 0.056),
                     400: (0.962, 0.008)},
     "PickCube": {25: (0.007, 0.012), 50: (0.007, 0.006), 100: (0.192, 0.018),
                  200: (0.452, 0.031), 400: (0.534, 0.021)},
 }
 PEG_VAL = {25: 0.0, 50: 0.0, 100: 0.0, 200: 0.008}  # val split, 50 episodes
-HORIZON = {"PushCube": 100, "PickCube": 100, "StackCube": 200, "PlaceSphere": 200, "LiftPegUpright": 200}
+HORIZON = {"PullCube": 100, "PushCube": 100, "PickCube": 100, "StackCube": 200, "PlaceSphere": 200, "LiftPegUpright": 200}
 
 # Track B: N=100. Tasks ordered easy → hard by the best backbone's success.
-BB_TASKS = ["PushCube", "PickCube", "LiftPegUpright", "StackCube", "PegInsertionSide"]
-BB_TICK = {"PushCube": "PushCube\n(易)", "PickCube": "PickCube", "LiftPegUpright": "LiftPeg-\nUpright",
+BB_TASKS = ["PullCube", "PushCube", "PickCube", "LiftPegUpright", "StackCube", "PegInsertionSide"]
+BB_TICK = {"PullCube": "PullCube\n(易)", "PushCube": "PushCube", "PickCube": "PickCube", "LiftPegUpright": "LiftPeg-\nUpright",
            "StackCube": "StackCube", "PegInsertionSide": "Peg-\nInsertion(难)"}
 BB_ONCE = {
+    "PullCube": {"UNet": mean_sd([0.96, 0.96, 0.94, 0.96, 0.96]),
+                 "Transformer": mean_sd([0.98, 0.97, 0.97, 0.99, 0.99]),
+                 "MLP": mean_sd([0.90, 0.93, 0.93, 0.89, 0.94])},
     "PushCube": {"UNet": mean_sd([0.96, 0.96, 0.94, 0.95, 0.93]),
                  "Transformer": mean_sd([0.89, 0.90, 0.88, 0.89, 0.89]),
                  "MLP": mean_sd([0.95, 0.92, 0.92, 0.89, 0.93])},
@@ -109,6 +120,9 @@ BB_ONCE = {
                          "MLP": (0.0, 0.0)},
 }
 BB_END = {  # PushCube reports means only
+    "PullCube": {"UNet": mean_sd([0.96, 0.96, 0.94, 0.96, 0.96]),
+                 "Transformer": mean_sd([0.98, 0.97, 0.97, 0.99, 0.99]),
+                 "MLP": mean_sd([0.90, 0.91, 0.93, 0.89, 0.94])},
     "PushCube": {"UNet": (0.54, None), "Transformer": (0.63, None), "MLP": (0.67, None)},
     "PickCube": {"UNet": mean_sd([0.13, 0.13, 0.12, 0.14, 0.12]),
                  "Transformer": mean_sd([0.85, 0.76, 0.84, 0.74, 0.79]),
@@ -121,6 +135,7 @@ BB_END = {  # PushCube reports means only
 }
 # Difference vs UNet and whether the report's test says the interval excludes 0.
 BB_DELTA_SIG = {
+    "PullCube": {"Transformer": True, "MLP": True},
     "PushCube": {"Transformer": True, "MLP": False},
     "PickCube": {"Transformer": True, "MLP": True},
     "LiftPegUpright": {"Transformer": False, "MLP": True},  # unpaired bootstrap, computed here
@@ -164,7 +179,7 @@ def fig_datasize(out: Path):
 
     # Direct labels at line ends, nudged apart where they would collide.
     ends = {t: (max(DATA_SIZE[t]), DATA_SIZE[t][max(DATA_SIZE[t])][0]) for t in DATA_SIZE}
-    nudge = {"PushCube": 0.025, "StackCube": -0.03, "PlaceSphere": 0.0, "LiftPegUpright": -0.01, "PickCube": -0.01}
+    nudge = {"PullCube": 0.03, "PushCube": -0.025, "StackCube": 0.03, "PlaceSphere": 0.0, "LiftPegUpright": -0.03, "PickCube": -0.01}
     for t, (n, p) in ends.items():
         ax.annotate(t, (n, p + nudge[t]), xytext=(7, 0), textcoords="offset points",
                     color=INK, fontsize=9, va="center")
@@ -176,7 +191,7 @@ def fig_datasize(out: Path):
     ax.set_xlabel("训练示范数 N（log 刻度）")
     ax.set_ylabel("success_once（test，100 回合）")
     ax.set_title("UNet 数据量曲线：形状相近，难度决定曲线位置", loc="left")
-    ax.legend(loc="lower right", bbox_to_anchor=(1.0, 0.1), fontsize=8, ncol=1, handlelength=2.2)
+    ax.legend(loc="center left", bbox_to_anchor=(1.12, 0.5), fontsize=8, ncol=1, handlelength=2.2)
     fig.text(0.01, -0.02, "阴影 = 训练 seed 间 SD（N=25/50 为 3 seed，N≥100 为 5 seed）。"
              "各任务控制模式与回合长度不同，只比较形状与位置。", color=MUTED, fontsize=7.5)
     fig.savefig(out / "cross_task_datasize.png")
@@ -189,8 +204,8 @@ def _cell_text_color(rgba):
 
 
 def fig_backbone_heatmap(out: Path):
-    rows = ["PushCube", "PickCube", "LiftPegUpright", "StackCube", "PullCube"]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.6, 4.4), gridspec_kw={"wspace": 0.6})
+    rows = ["PullCube", "PushCube", "PickCube", "LiftPegUpright", "StackCube"]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.6, 5.0), gridspec_kw={"wspace": 0.6})
     seq = LinearSegmentedColormap.from_list("seq", BLUE_RAMP)
     div = LinearSegmentedColormap.from_list("div", DIVERGING)
     seq_norm, div_norm = Normalize(0, 1), Normalize(-0.75, 0.75)
@@ -207,13 +222,6 @@ def fig_backbone_heatmap(out: Path):
 
     for i, task in enumerate(rows):
         for j, bb in enumerate(BACKBONES):
-            for ax in (ax1, ax2):
-                if task == "PullCube":
-                    ax.add_patch(Rectangle((j + 0.04, i + 0.04), 0.92, 0.92, fc=SURFACE,
-                                               ec=AXIS, hatch="////", lw=0.8))
-                    continue
-            if task == "PullCube":
-                continue
             m, s = BB_ONCE[task][bb]
             best = max(BB_ONCE[task][b][0] for b in BACKBONES)
             fc = seq(seq_norm(m))
@@ -232,10 +240,6 @@ def fig_backbone_heatmap(out: Path):
                 label = f"{d:+.3f}" + (" *" if BB_DELTA_SIG[task][bb] else "")
             ax2.text(j + 0.5, i + 0.5, label, ha="center", va="center", color=_cell_text_color(fc),
                      fontsize=10)
-    for ax in (ax1, ax2):
-        ax.text(1.5, rows.index("PullCube") + 0.5, "无报告", ha="center", va="center", color=INK2, fontsize=9,
-                bbox=dict(fc=SURFACE, ec="none", pad=1.5))
-
     ax1.set_title("success_once（N=100，粗体 = 本任务最佳）", loc="left", pad=24)
     ax2.set_title("相对 UNet 的差值（* = 区间不含 0）", loc="left", pad=24)
     for ax, cmap, norm, ticks in ((ax1, seq, seq_norm, [0, 0.5, 1]), (ax2, div, div_norm, [-0.6, 0, 0.6])):
@@ -249,7 +253,7 @@ def fig_backbone_heatmap(out: Path):
 
 
 def fig_difficulty(out: Path):
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2), gridspec_kw={"wspace": 0.22})
+    fig, axes = plt.subplots(1, 3, figsize=(16.5, 4.2), gridspec_kw={"wspace": 0.22})
     x = np.arange(len(BB_TASKS))
     offset = {"UNet": -0.18, "Transformer": 0.0, "MLP": 0.18}
 
@@ -275,7 +279,7 @@ def fig_difficulty(out: Path):
     # Relative to the best backbone on the same task; Peg is all ~0 so it is excluded.
     ax = axes[2]
     ax.grid(axis="y")
-    rel_tasks = BB_TASKS[:4]
+    rel_tasks = BB_TASKS[:5]
     xr = np.arange(len(rel_tasks))
     for bb in BACKBONES:
         rel = [BB_ONCE[t][bb][0] / max(BB_ONCE[t][b][0] for b in BACKBONES) for t in rel_tasks]
@@ -283,11 +287,11 @@ def fig_difficulty(out: Path):
         ax.annotate(f"{bb} {rel[-1]:.2f}", (xr[-1], rel[-1]), xytext=(8, {"UNet": -9, "Transformer": 7, "MLP": 0}[bb]),
                     textcoords="offset points", color=INK, fontsize=8.5, va="center")
     ax.set_xticks(xr, [BB_TICK[t] for t in rel_tasks[:-1]] + ["StackCube\n(难)"], fontsize=8.5)
-    ax.set_xlim(-0.3, 3.9)
+    ax.set_xlim(-0.3, 4.9)
     ax.set_ylim(0, 1.08)
     ax.set_title("相对本任务最佳主干（success_once）", loc="left")
     fig.text(0.01, -0.06, "误差棒 = 5 个训练 seed 的 SD（PushCube 与 PegInsertion 的 success_at_end 无 SD）。"
-             "任务按最佳主干成功率排序作为难度代理；只有 4 个可区分的任务，趋势仅供参考。LiftPegUpright 评估 400 步。",
+             "任务按最佳主干成功率排序作为难度代理；只有 5 个可区分的任务，趋势仅供参考。LiftPegUpright 评估 400 步。",
              color=MUTED, fontsize=7.5)
     fig.savefig(out / "cross_task_difficulty.png")
     plt.close(fig)
