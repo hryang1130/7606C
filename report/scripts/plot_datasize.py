@@ -46,24 +46,29 @@ CURVES = {
 }
 PEG_VAL = {25: 0.0, 50: 0.0, 100: 0.0, 200: 0.8}  # validation split, 50 episodes
 
-COLOR = dict(zip(CURVES, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]))
-MARKER = dict(zip(CURVES, ["o", "s", "^", "D", "v", "P"]))
+# Okabe-Ito colour-blind-safe palette (blue, vermillion, bluish green, orange,
+# reddish purple, sky blue). Marker and dash pattern repeat the identity so the
+# figure also reads in grayscale.
+COLOR = dict(zip(CURVES, ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9"]))
+MARKER = dict(zip(CURVES, ["o", "s", "^", "D", "v", "X"]))
+DASH = dict(zip(CURVES, ["-", "-", "--", "-", "--", "-."]))
 
 plt.rcParams.update({
     "font.family": "serif",
     "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
     "mathtext.fontset": "stix",
     "font.size": 9,
-    "axes.edgecolor": AXIS,
+    "axes.edgecolor": INK,
+    "axes.linewidth": 0.6,
     "axes.labelcolor": INK,
     "axes.spines.top": False,
     "axes.spines.right": False,
-    "xtick.color": AXIS,
-    "ytick.color": AXIS,
-    "xtick.labelcolor": INK2,
-    "ytick.labelcolor": INK2,
+    "xtick.color": INK,
+    "ytick.color": INK,
+    "xtick.major.width": 0.6,
+    "ytick.major.width": 0.6,
     "grid.color": GRID,
-    "grid.linewidth": 0.6,
+    "grid.linewidth": 0.5,
     "legend.frameon": False,
     "pdf.fonttype": 42,
 })
@@ -78,13 +83,13 @@ def main() -> None:
         ns = sorted(curve)
         mean = np.array([curve[n][0] for n in ns])
         sd = np.array([curve[n][1] for n in ns])
-        ax.fill_between(ns, mean - sd, mean + sd, color=COLOR[task], alpha=0.15, lw=0)
-        ax.plot(ns, mean, color=COLOR[task], lw=1.6, marker=MARKER[task], ms=5,
-                mec="white", mew=0.8, label=task, zorder=3)
+        ax.errorbar(ns, mean, yerr=sd, color=COLOR[task], lw=1.2, ls=DASH[task],
+                    marker=MARKER[task], ms=4.5, mew=0, elinewidth=0.8, capsize=2,
+                    capthick=0.8, label=task, zorder=3)
 
     peg_n = sorted(PEG_VAL)
-    ax.plot(peg_n, [PEG_VAL[n] for n in peg_n], color=MUTED, lw=1.2, ls=(0, (3, 2)),
-            marker="x", ms=4.5, label="PegInsertionSide (val.)", zorder=2)
+    ax.plot(peg_n, [PEG_VAL[n] for n in peg_n], color=INK2, lw=1.0, ls=":",
+            marker="x", ms=4, label="PegInsertionSide (val.)", zorder=2)
 
     ax.set_xscale("log", base=2)
     ax.set_xticks([25, 50, 100, 200, 400], ["25", "50", "100", "200", "400"])
@@ -100,7 +105,7 @@ def main() -> None:
     by_label = dict(zip(labels, handles))
     order = sorted(CURVES, key=lambda t: -CURVES[t][max(CURVES[t])][0]) + ["PegInsertionSide (val.)"]
     ax.legend([by_label[name] for name in order], order, loc="center left",
-              bbox_to_anchor=(1.02, 0.5), fontsize=8, handlelength=2.4, labelcolor=INK)
+              bbox_to_anchor=(1.02, 0.5), fontsize=8, handlelength=3.0, labelcolor=INK)
 
     out = Path(__file__).resolve().parent.parent / "figures" / "datasize_curves.pdf"
     fig.savefig(out, bbox_inches="tight", pad_inches=0.02)
