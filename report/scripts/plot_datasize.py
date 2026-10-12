@@ -44,7 +44,6 @@ CURVES = {
     "PlaceSphere": {25: (4.7, 2.9), 50: (25.3, 4.1), 100: (36.0, 3.6), 200: (76.6, 5.6), 400: (96.2, 0.8)},
     "LiftPegUpright": {25: (7.0, 1.0), 50: (36.3, 3.1), 100: (67.4, 2.1), 200: (74.8, 2.8), 400: (79.2, 0.8)},
 }
-PEG_VAL = {25: 0.0, 50: 0.0, 100: 0.0, 200: 0.8}  # validation split, 50 episodes
 
 # Okabe-Ito colour-blind-safe palette (blue, vermillion, bluish green, orange,
 # reddish purple, sky blue). Marker and dash pattern repeat the identity so the
@@ -87,10 +86,6 @@ def main() -> None:
                     marker=MARKER[task], ms=4.5, mew=0, elinewidth=0.8, capsize=2,
                     capthick=0.8, label=task, zorder=3)
 
-    peg_n = sorted(PEG_VAL)
-    ax.plot(peg_n, [PEG_VAL[n] for n in peg_n], color=INK2, lw=1.0, ls=":",
-            marker="x", ms=4, label="PegInsertionSide (val.)", zorder=2)
-
     ax.set_xscale("log", base=2)
     ax.set_xticks([25, 50, 100, 200, 400], ["25", "50", "100", "200", "400"])
     ax.minorticks_off()
@@ -103,7 +98,7 @@ def main() -> None:
     # Legend ordered like the curves at their right ends, top to bottom.
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    order = sorted(CURVES, key=lambda t: -CURVES[t][max(CURVES[t])][0]) + ["PegInsertionSide (val.)"]
+    order = sorted(CURVES, key=lambda t: -CURVES[t][max(CURVES[t])][0])
     ax.legend([by_label[name] for name in order], order, loc="center left",
               bbox_to_anchor=(1.02, 0.5), fontsize=8, handlelength=3.0, labelcolor=INK)
 

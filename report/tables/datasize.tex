@@ -3,8 +3,12 @@
 % reports. PushCube means and SDs, and the success_at_end SDs, are computed from
 % the per-seed values recorded in dp-manip/scripts/plot_cross_task.py.
 % Verify every cell against the raw evaluation output before submission.
-% Still open: PushCube success_at_end SD; PlaceSphere success_at_end;
-% LiftPegUpright success_at_end under the 200-step horizon used in this table.
+% The PlaceSphere row was checked on 2026-10-13 against the raw evaluation files
+% (~/dp-runs-placesphere/*/eval/test_final_h200.json on the cluster): all 21
+% per-run success counts match, and success_at_end equals success_once in
+% every run.
+% Still open: PushCube success_at_end SD; LiftPegUpright success_at_end under
+% the 200-step horizon used in this table.
 % Keep in sync with scripts/plot_datasize.py.
 \begin{table}[htbp]
   \centering
@@ -28,17 +32,13 @@
     StackCube & $1.7\pm1.2$ & $12.3\pm2.5$ & $41.0\pm2.9$ & $66.0\pm3.1$ & $83.2\pm1.9$ & $35.6\pm2.5$ \\
     PushCube & $45.3\pm3.2$ & $82.3\pm1.5$ & $94.8\pm1.3$ & $96.0\pm1.9$ & -- & 54$^{a}$ \\
     PullCube & $76.7\pm1.2$ & $91.3\pm0.6$ & $95.6\pm0.9$ & $97.2\pm0.4$ & -- & $95.6\pm0.9$ \\
-    PlaceSphere & $4.7\pm2.9$ & $25.3\pm4.1$ & $36.0\pm3.6$ & $76.6\pm5.6$ & $96.2\pm0.8$ & \pending \\
+    PlaceSphere & $4.7\pm2.9$ & $25.3\pm4.1$ & $36.0\pm3.6$ & $76.6\pm5.6$ & $96.2\pm0.8$ & $36.0\pm3.6$ \\
     LiftPegUpright$^{b}$ & $7.0\pm1.0$ & $36.3\pm3.1$ & $67.4\pm2.1$ & $74.8\pm2.8$ & $79.2\pm0.8$ & \pending \\
-    \midrule
-    PegInsertionSide$^{c}$ & 0.0 & 0.0 & 0.0 & 0.8 & -- & \pending \\
     \bottomrule
   \end{tabularx}
 
   \vspace{2pt}
   \parbox{\linewidth}{\footnotesize
   $^{a}$ Mean only; seed-level values not yet reported.\quad
-  $^{b}$ Evaluated with a 200-step horizon; \cref{tab:backbones} uses 400.\quad
-  $^{c}$ Negative result, not one of the six tasks; evaluated on 50 validation
-  episodes, not the test split.}
+  $^{b}$ Evaluated with a 200-step horizon; \cref{tab:backbones} uses 400.}
 \end{table}

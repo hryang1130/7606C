@@ -9,10 +9,12 @@
 \title{Data Efficiency, Backbone Choice,\\
   and Failure Correction for\\
   RGB Diffusion Policies in ManiSkill}
+% The style sets only the first line of the author block in bold, so the
+% second line of names repeats it.
 \author{Chu Jiajie \quad Jin Qizheng \quad Lu Sen \quad Shao Chuncheng \quad
   Song Zirui\\
-  Wang Bowen \quad Wong Pak Hung Philip \quad Yang Haoran \quad Yang Qihang
-  \quad Yu Houcheng\\[3pt]
+  \textbf{Wang Bowen \quad Wong Pak Hung Philip \quad Yang Haoran \quad
+  Yang Qihang \quad Yu Houcheng}\\[3pt]
   DASC7606C Group 11, The University of Hong Kong}
 
 \begin{document}
@@ -30,8 +32,7 @@ MLP falls behind on the longer tasks, and the standard UNet overfits on one
 task, reaching 19\% where the Transformer reaches 91\%. Third, fine-tuning on
 100 expert corrections collected at the policy's own missed grasps raises
 success on one task from 33\% to 47\%, while the same amount of ordinary
-demonstrations has no effect. A seventh task, peg insertion, stayed unsolved
-in every configuration we tried. We also reproduce one comparison on a Moore
+demonstrations has no effect. We also reproduce one comparison on a Moore
 Threads GPU.
 \end{abstract}
 

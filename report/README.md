@@ -13,12 +13,13 @@
 已起草的正文（2026-10-12，依据仓库里的配置、代码和文档，不是依据 run 记录；每节文件头注释写了来源）：
 
 - §2.1 任务覆盖与任务替换说明（PlugCharger 的替换原因仍待填）。
-- §2.2 示范生成与质量：流水线、导出时的检查、控制模式选择。示范长度和重放保留率在任务表里，
-  目前只有 PlaceSphere 和 LiftPegUpright 的长度、PlaceSphere 的保留率是正式数据；
-  PegInsertionSide 的 97% 是小规模试跑的数字，要换成正式生成日志里的统计。
+- §2.2 示范生成与质量：流水线、导出时的检查、控制模式选择、默认生成数量（440 / 55，取自
+  `maniskill-demogen/tasks.py`）。实测的长度和保留率只有 PlaceSphere 和 LiftPegUpright 有记录，
+  写在正文里；任务表不再有这两列，改为列出每个任务的相机数。
+- §5.1 的失败回合编号取自 PickCube、PushCube、PullCube 三个 `unet_n100_s1` run 的 `videos.json`
+  （测试种子 10000–10099）。视频文件只在本机 `dp-manip/results/` 下，没有入库。
 - §2.3 数据划分：四类种子区间、接管实验的种子区间、嵌套子集、归一化统计的范围。
-- 摘要、§1 引言、§5 失败分析与局限、§6 结论。§5.2 的 PegInsertionSide 负结果来自
-  `../dp-manip/docs/peginsertion-results.zh-CN.md`。
+- 摘要、§1 引言、§5 失败分析与局限、§6 结论。
 - §4.1 里 PlaceSphere 的相邻档差值区间是为本报告补算的（`scripts/bootstrap_adjacent.py`，
   按逐 seed 成功率做两层 bootstrap，不配对回合）；同一脚本能复现 PickCube 报告里的区间。
 - 参考文献新增 8 条，标题、作者、年份已对照 arXiv 记录核对，会议名凭记忆填写，需确认。
@@ -88,7 +89,7 @@ latexmk -pdf main.tex
 ## 内容顺序和页数预算
 
 以下是写作预算，不是强制分页。正文与声明合计约 7.8 页，离 8 页上限几乎没有余量；填入图表后复查实际页数。
-**2026-10-12 实际状态：摘要到结论正好 8 页，参考文献在第 9 页，三项声明作为附录放在第 10 页。**
+**2026-10-12 实际状态：摘要到结论约 7.5 页，参考文献在第 9 页，三项声明作为附录放在第 10–11 页。**
 声明移到附录是组内决定；课程文件只写了参考文献不计页数，没有提附录，需向助教确认。
 正文里还有 5 处 `[TO FILL]` 占了约 8 行，补上内容时注意别超页。
 已做的压缩：删掉 pipeline 占位图；§2.2 的产出率并入任务表；§4.3 的剂量与机制各压成一句；
@@ -105,7 +106,7 @@ latexmk -pdf main.tex
 | `04-results.tex` §4.2 | 主干：任务 × 主干成功率矩阵，效率数字写在正文 | 0.9 |
 | `04-results.tex` §4.3 | 专家接管纠正（B/C/D 三组对照） | 0.6 |
 | `04-results.tex` §4.4 | Moore Threads profiling 与 benchmark | 0.4 |
-| `05-discussion.tex` | 失败案例、PegInsertionSide 负结果、诊断、限制 | 0.9 |
+| `05-discussion.tex` | 失败案例、诊断、限制 | 0.9 |
 | `06-conclusion.tex` | 回答三个研究问题 | 0.2 |
 | `07-statements.tex`（附录，在参考文献之后） | 全体成员贡献、AI 使用、复现链接和致谢 | 不计入正文 |
 
@@ -119,10 +120,12 @@ latexmk -pdf main.tex
 ### 任务口径
 
 六任务按实际完成情况写：PickCube、StackCube、PushCube、PullCube、PlaceSphere、LiftPegUpright。
-原计划的 PlugCharger 已换成 LiftPegUpright；PegInsertionSide 成功率约为 0，由 PlaceSphere 顶替，
-只作为负结果出现在 `05-discussion.tex` 和表格的附加行里，不计入六任务。任务替换的原因要在 §2 写明。
+原计划的 PegInsertionSide 和 PlugCharger 分别换成了 PlaceSphere 和 LiftPegUpright。按组内决定，
+这两个原任务只在 §2.1 "Changes from the proposal" 一段里出现，原因统一写为无法建立可靠基线，
+结果部分的正文、表格和图里都没有它们；另一处提及是附录贡献表里 Chu Jiajie 那行。相关实验记录仍在
+`../dp-manip/docs/peginsertion-results.zh-CN.md`，需要恢复时可参考提交 `0160063` 里的 §5.2。
 `tables/tasks.tex` 的控制模式和回合上限取自 `../dp-manip/configs/tasks/*.toml`；LiftPegUpright
-的回合上限留空，因为配置默认值与实际评估用的步数不一致，需按最终评估口径填写。
+的回合上限写成 "200, 400" 并加脚注：数据量实验用 200 步，主干实验用 400 步。
 
 ### Moore Threads 加分项
 

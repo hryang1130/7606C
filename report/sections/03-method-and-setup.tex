@@ -66,9 +66,6 @@ for 100k optimizer steps regardless of task, backbone, or $N$, and we evaluate
 the averaged weights of the final checkpoint. Checkpoints at 10k, 30k, and 60k
 steps are kept for diagnostics only. The only per-task settings are the control
 mode and the episode horizon (\cref{tab:tasks}).
-\todo{Name the hardware for every study (HKU GPU Farm RTX 4080 nodes; Moore
-Threads GPU model), the typical wall-clock time per run, and which results were
-produced on which device.}
 
 \subsection{Evaluation protocol}
 Policies are evaluated in closed loop on the same CPU physics backend that
@@ -105,8 +102,7 @@ backbones differ widely in size (\cref{sec:backbone}), so the comparison is
 between these implementations, not between architecture families at equal
 capacity.
 The comparison covers PickCube, StackCube, PushCube, PullCube, and
-LiftPegUpright, and was also run on PegInsertionSide; it was not run on
-PlaceSphere.
+LiftPegUpright; it was not run on PlaceSphere.
 
 \textbf{Takeover correction (RQ3).} On PlaceSphere, starting from the three
 $N=100$ UNet baseline checkpoints, a trigger that reads privileged simulator

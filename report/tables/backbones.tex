@@ -4,13 +4,14 @@
 % dp-manip/scripts/plot_cross_task.py. The success_at_end values are reported in
 % the text of section 4.2 (same sources, summary section 7.4).
 % Verify every cell against the raw evaluation output before submission.
+% PlaceSphere is left out: only UNet runs exist for it.
 \begin{table}[htbp]
   \centering
   \caption{Backbone comparison at $N=100$: \metriconce{} (\%), mean $\pm$
   sample standard deviation over 5 training seeds, each evaluated on 100
   held-out test episodes. The UNet column reuses the $N=100$ runs of
   \cref{tab:datasize}, except that LiftPegUpright is evaluated here with a
-  400-step horizon. ``--'': no backbone comparison was run.}
+  400-step horizon. PlaceSphere has no backbone comparison.}
   \label{tab:backbones}
   \small
   \begin{tabularx}{\linewidth}{@{}Yccc@{}}
@@ -21,7 +22,6 @@
     StackCube & $41.0\pm2.9$ & $41.8\pm4.8$ & $25.0\pm2.5$ \\
     PushCube & $94.8\pm1.3$ & $89.0\pm0.7$ & $92.2\pm2.2$ \\
     PullCube & $95.6\pm0.9$ & $98.0\pm1.0$ & $91.8\pm2.2$ \\
-    PlaceSphere & -- & -- & -- \\
     LiftPegUpright & $71.4\pm1.7$ & $64.6\pm5.9$ & $41.0\pm9.6$ \\
     \bottomrule
   \end{tabularx}

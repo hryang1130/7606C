@@ -15,30 +15,25 @@ pushing from the near side versus reaching behind the cube and dragging it
 back. Policies see
 $128\times128$ RGB images and the low-dimensional state that ManiSkill
 exposes in RGB observation mode (robot state and task extras such as the goal
-position); object poses are never given to the policy. PickCube, PushCube,
-PullCube, and PlaceSphere use one fixed camera; StackCube and PegInsertionSide
-add a wrist camera.
-\todo{State the cameras of LiftPegUpright.}
+position); object poses are never given to the policy. Every task uses one
+fixed camera, and StackCube adds a wrist camera.
 
 \textbf{Changes from the proposal.} The proposal listed PegInsertionSide and
-PlugCharger as the two precision tasks, and named LiftPegUpright in advance as
-the fallback for PlugCharger. Both were replaced. LiftPegUpright took the place
-of PlugCharger under that fallback rule.
-\todo{State the observed reason with numbers, e.g.\ expert or replay success
-rate for PlugCharger.}
-PlaceSphere took the place of PegInsertionSide: none of the PegInsertionSide
-configurations we trained reached a usable success rate (\cref{sec:discussion}),
-and a baseline near zero supports neither a data-size curve nor the
-failure-correction study, which needs both successful and failed rollouts. We
-keep PegInsertionSide as a negative result; results on PlaceSphere are not
-evidence about precision insertion.
+PlugCharger as its two precision tasks. We could not establish a reliable
+baseline on either, so both were replaced and neither appears in the results
+below. LiftPegUpright, the fallback named in the proposal, replaces
+PlugCharger. PlaceSphere replaces PegInsertionSide; it was chosen because the
+failure-correction study needs a baseline with both successful and failed
+rollouts.
 \input{tables/tasks}
 
 \subsection{Demonstration generation and quality}
 % Drafted 2026-10-12. Sources: maniskill-demogen/README.md, docs/pipeline.md,
 % tasks.py and scripts/run_cpu.py (pipeline, checks, control modes);
 % dp-manip/docs/experiment-progress.zh-CN.md section 6 and
-% docs/task-owner-runbook.zh-CN.md section 2 (PlaceSphere yield).
+% docs/task-owner-runbook.zh-CN.md section 2 (PlaceSphere yield); the
+% LiftPegUpright member report task6_backbone, section 2.1 (its cameras and
+% episode lengths); maniskill-demogen/tasks.py (440 / 55 default counts).
 We generated every demonstration ourselves with the motion-planning solvers
 that ManiSkill provides for the Panda arm; no dataset was downloaded. The
 solver is run on consecutive environment seeds and only successful episodes
@@ -52,15 +47,17 @@ ManiSkill~3.0.1 records stale contact observations there. It writes the first
 usable.
 
 The solver acts in joint-position control. The cube tasks and PlaceSphere are
-converted to end-effector delta-position control. For the tasks that need
-end-effector rotation, conversion to delta-pose control kept only 60--73\% of
-pilot trajectories, below the 90\% threshold we had set, so they keep
-joint-position control. \Cref{tab:tasks} lists episode length and the share of
-expert trajectories that pass the export checks. PlaceSphere had the lowest
-yield, so we regenerated it from 700 expert trajectories to reach 400 usable
-ones.
-\todo{Fill the length and yield columns of \cref{tab:tasks} for the remaining
-tasks from the final generation logs.}
+converted to end-effector delta-position control. LiftPegUpright needs
+end-effector rotation; in pilots on rotation tasks, conversion to delta-pose
+control kept only 60--73\% of the trajectories, below the 90\% threshold we
+had set, so it keeps joint-position control.
+
+By default the generator produces 440 training and 55 validation expert
+trajectories per task and exports the first 400 and 50 that pass the checks.
+PlaceSphere was the exception: only 68\% of its expert trajectories passed
+(298 of 440), so we regenerated it from 700. Episode length differs widely between tasks:
+PlaceSphere demonstrations take 90--150 steps (median 113), while those of
+LiftPegUpright take 153--702 (median 169, first 100 demonstrations).
 
 \subsection{Data separation}
 \label{sec:separation}
