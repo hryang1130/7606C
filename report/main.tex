@@ -1,0 +1,40 @@
+% Build from report/: latexmk -pdf main.tex
+% Target: 5--8 pages excluding references. This is a scaffold, not a submission.
+% NeurIPS is an official style package layered on the article class.
+% Use preprint mode for this identified course report.
+\documentclass{article}
+\input{preamble}
+
+\title{Data Efficiency and Backbone Comparisons\\
+  for RGB Diffusion Policies in ManiSkill}
+\author{DASC7606C --- Group 11\\
+  The University of Hong Kong\\
+  \textit{[Add all member names and student IDs]}\\
+  \textit{[Submission date]}}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+\todo{Write 120--150 words after the results are finalized: research question,
+six-task scope, demonstration source, controlled comparisons, main quantitative
+finding, and principal limitation. Do not claim completed experiments here
+until their artifacts have been verified.}
+\end{abstract}
+
+\noindent\textbf{Keywords:} diffusion policy; imitation learning; data efficiency;
+robot manipulation; ManiSkill.
+
+\input{sections/01-introduction}
+\input{sections/02-tasks-and-data}
+\input{sections/03-method}
+\input{sections/04-experiments}
+\input{sections/05-results}
+\input{sections/06-discussion}
+\input{sections/07-conclusion}
+\input{sections/08-statements}
+
+% Only references are explicitly excluded from the course's page limit.
+\clearpage
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+\end{document}

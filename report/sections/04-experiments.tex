@@ -1,0 +1,36 @@
+% Suggested final budget: 0.75--1.0 page.
+\section{Experimental Design}
+\label{sec:experiments}
+\subsection{Data-size study}
+\todo{Confirm completed $N\in\{25,50,100,200\}$ cells and any justified $N=400$
+extension. State training seed counts, nested-subset construction, fixed
+optimizer-step budget, and shared test initial conditions. Distinguish planned
+experiments from completed experiments. Explain the repeated exposure implied
+by a fixed-step rather than fixed-epoch budget.}
+
+\subsection{Backbone study}
+\todo{List the task subset, demonstration count per task, completed architectures,
+seed counts, and settings held constant. State parameter counts and any tuning
+or compute differences. If capacities differ, restrict conclusions to these
+specific implementations rather than claiming a pure architecture effect.}
+
+\subsection{Evaluation and statistical reporting}
+\todo{Confirm actual evaluation protocol: held-out seeds, number of episodes,
+simulation backend, inference randomness, parallel environments, episode
+termination behavior, and checkpoint selection. Keep validation, training-seed
+diagnostics, and held-out test results separate.}
+
+For a single training run with $E$ evaluation episodes, report the success
+count $S$ and rate $\hat p=S/E$. Define \metriconce{} as success at any point
+in an episode and \metricend{} as success at its final step. Across $R$
+training seeds, summarize the seed-level rates with
+\begin{equation}
+  \bar p=\frac{1}{R}\sum_{r=1}^{R}\hat p_r,
+  \qquad
+  s_p=\sqrt{\frac{1}{R-1}\sum_{r=1}^{R}(\hat p_r-\bar p)^2}.
+  \label{eq:seed-statistics}
+\end{equation}
+\todo{State which interval/comparison procedure was actually used, and its
+resampling unit. Seed-level standard deviation is not a confidence interval.
+For a single training seed, do not report a fabricated standard deviation.
+Document the hardware and timing method for efficiency measurements.}

@@ -1,0 +1,29 @@
+% Leave typography and page geometry to the unmodified official style.
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
+\usepackage[preprint]{neurips_2026}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{placeins}
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink,noabbrev]{cleveref}
+
+\graphicspath{{figures/}}
+\setlist{nosep,leftmargin=*}
+\renewcommand{\arraystretch}{1.18}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\definecolor{draftgray}{RGB}{90,98,108}
+\newcommand{\todo}[1]{\par\noindent{\color{draftgray}\small
+  \textbf{[TO FILL]} #1}\par}
+\newcommand{\pending}{\textcolor{draftgray}{\textit{TBD}}}
+\newcommand{\metriconce}{\texttt{success\_once}}
+\newcommand{\metricend}{\texttt{success\_at\_end}}
+\newcommand{\figplaceholder}[2][42mm]{%
+  \fbox{\begin{minipage}[c][#1][c]{0.94\linewidth}
+    \centering\color{draftgray}\small\textbf{Figure placeholder}\\[0.5em]#2
+  \end{minipage}}}

@@ -1,0 +1,31 @@
+% Suggested final budget: 1.5--2.0 pages, including plots and tables.
+\section{Results}
+\label{sec:results}
+\subsection{Six-task baselines}
+\input{tables/baselines}
+\todo{Summarize the verified per-task baseline results in
+\cref{tab:baselines}. Report the evaluated configuration and episodes per seed.
+Every value must be traceable to raw evaluation output. TBD denotes unavailable
+data; it must never be interpreted as a measured zero.}
+
+\subsection{Effect of demonstration count}
+\begin{figure}[htbp]
+  \centering
+  \figplaceholder[45mm]{Six task panels: held-out success versus $\log_2 N$.
+  Label the evaluated split, seed counts, and meaning of error bars.}
+  \caption{Placeholder for the data-efficiency study. Final error bars should
+  represent the stated seed-level variability or uncertainty measure.}
+  \label{fig:data-efficiency}
+\end{figure}
+\todo{Report observed trends, adjacent-$N$ effect sizes and uncertainty, and
+exceptions. Describe saturation only when supported. Do not infer improvement
+from training loss alone or interpolate a meaningful data requirement when
+success remains near zero.}
+
+\subsection{Backbone success and efficiency}
+\input{tables/backbones}
+\todo{Discuss supported differences and trade-offs in
+\cref{tab:backbones}. State the task and $N$ for each block. Add a
+success--inference-time plot only if it provides evidence beyond the table.
+If this study is incomplete, narrow the scope or remove the subsection.}
+\FloatBarrier

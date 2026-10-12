@@ -1,0 +1,27 @@
+% Suggested final budget: 1.0 page, including the task table.
+\section{Tasks and Expert Demonstrations}
+\label{sec:data}
+\subsection{Task coverage}
+\todo{Confirm installed ManiSkill version, robot embodiment, exact environment
+IDs, observation shapes, camera settings, action dimensions/control modes,
+episode limits, and environment-defined success criteria for every task.
+The skill descriptions below explain selection, not formal success thresholds.}
+\input{tables/tasks}
+
+\subsection{Demonstration generation and quality}
+\todo{Describe the actual collection process, collection scripts and versions,
+expert method, success filtering, attempted/accepted trajectory counts, action
+conversion or replay, and quality checks. Explain any task-specific fallback.
+Separate generated data from any externally downloaded material.}
+
+\todo{Add a compact dataset summary: successful training-pool size and independent
+validation size per task; successful replay fraction; trajectory lengths;
+rejected trajectories and reasons. Include evidence for RGB/action alignment,
+consistent control modes, and exclusion of privileged observations from policy
+inputs. Report actual counts rather than planned targets.}
+
+\subsection{Data separation}
+\todo{Document the training subsets, validation demonstrations, validation
+rollout seeds, and held-out test seeds separately. Explain how data leakage is
+avoided and how normalization statistics are fitted only on each training
+subset. Specify whether subsets are nested and fixed across training seeds.}

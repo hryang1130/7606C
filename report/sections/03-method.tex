@@ -1,0 +1,45 @@
+% Suggested final budget: 1.0--1.25 pages.
+\section{Policy and Implementation}
+\label{sec:method}
+\subsection{Conditional action denoising}
+For observation history $o$ and clean action sequence $a^{(0)}$, a standard
+noise-prediction objective is
+\begin{equation}
+  \mathcal{L}(\theta)=
+  \mathbb{E}_{o,a^{(0)},k,\epsilon}
+  \left[\left\|\epsilon-
+  \epsilon_\theta\!\left(
+  \sqrt{\bar\alpha_k}a^{(0)}+
+  \sqrt{1-\bar\alpha_k}\epsilon,k,o\right)
+  \right\|_2^2\right],
+  \label{eq:denoising}
+\end{equation}
+where $k$ denotes the diffusion timestep and $\epsilon\sim\mathcal{N}(0,I)$.
+This describes the denoising formulation used by Diffusion
+Policy~\citep{chi2023diffusion}.
+\todo{Align the notation with the actual implementation. Describe observation,
+prediction, and executed-action horizons; conditioning; padding; action
+normalization and inverse normalization; and inference sampling.}
+
+\subsection{Observation encoder and backbones}
+\todo{Describe the implemented RGB/proprioception encoder, weight initialization,
+image preprocessing, and feature fusion. Explain UNet, Transformer, and MLP
+conditioning and architecture parameters. Attribute adapted external code and
+state what was implemented or changed by the group.}
+
+\begin{figure}[htbp]
+  \centering
+  \figplaceholder[32mm]{Expert generation $\rightarrow$ RGB/proprioception
+  dataset $\rightarrow$ observation encoder and action denoiser $\rightarrow$
+  receding-horizon control $\rightarrow$ held-out evaluation.}
+  \caption{Placeholder for the implemented training and evaluation pipeline.
+  Replace with a labeled diagram of actual observations, actions, and horizons.}
+  \label{fig:pipeline}
+\end{figure}
+
+\subsection{Training and computing resources}
+\todo{Summarize optimizer, learning rate and schedule, batch size, optimizer
+steps, diffusion schedule, EMA, checkpoint policy, and hardware. Use the final
+run configurations, not obsolete planning documents. State task-specific
+exceptions and provide configuration/artifact links in the reproducibility
+statement.}
