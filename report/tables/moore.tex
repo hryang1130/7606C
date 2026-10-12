@@ -1,0 +1,31 @@
+% Sources:
+% - RTX 4080 SUPER training time: report/report_pickcube_yhr.md section 5.
+% - RTX 4080 success, seeds 1-3: per-seed values in report/report_pickcube_yhr.md
+%   sections 3.2 and 4 (UNet 0.17/0.18/0.19, Transformer 0.95/0.92/0.92,
+%   MLP 0.81/0.79/0.82).
+% - MTT S4000: report/moer_pickcube_backbone_runbook.md on branch
+%   origin/moore-transformer-attn-fix, sections 8.1, 8.2 and 8.5. The UNet and
+%   MLP training times are read from the completion timestamps in section 8.1
+%   (about 4.3 h and 2.0 h per run); the Transformer's 3.7 h is reported
+%   directly for the retrained runs. Replace them with summary.json wall times.
+\begin{table}[htbp]
+  \centering
+  \caption{PickCube at $N=100$ on an RTX~4080 SUPER and on a Moore Threads
+  MTT~S4000: wall-clock time of one 100k-step training run and \metriconce{}
+  (\%) on the 100 test episodes, mean $\pm$ sample standard deviation over
+  training seeds 1--3. The S4000 runs train in full precision and the RTX runs
+  in mixed precision.}
+  \label{tab:moore}
+  \small
+  \begin{tabularx}{\linewidth}{@{}Ycccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{Train 100k steps (h)} & \multicolumn{2}{c}{\metriconce{} (\%)} \\
+    \cmidrule(lr){2-3}\cmidrule(l){4-5}
+    Backbone & RTX 4080 SUPER & MTT S4000 & RTX 4080 SUPER & MTT S4000 \\
+    \midrule
+    UNet & 1.72 & 4.3 & $18.0\pm1.0$ & $15.3\pm4.9$ \\
+    Transformer & 1.75 & 3.7 & $93.0\pm1.7$ & $90.3\pm0.6$ \\
+    MLP & 0.74 & 2.0 & $80.7\pm1.5$ & $80.0\pm1.0$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}

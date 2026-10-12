@@ -1,0 +1,100 @@
+% Appendix, placed after the references by main.tex. The course lists the
+% contribution statement as a deliverable separate from the 5--8 page report
+% and requires the LLM usage statement to be in the report; confirm with the
+% teaching team that an appendix does not count toward the page limit.
+\section{Contribution Statement}
+% Drafted 2026-10-12 from two sources: the group's task-assignment and
+% presentation sheet (who was assigned which task and track, who presents which
+% part), and what is visible in the repository (reports, commits, pull
+% requests). Rows whose evidence is TBD rest on the assignment sheet alone.
+% Two rows follow the assignment sheet, as decided by the group on 2026-10-12:
+% Chu Jiajie (the repository shows no commits or report under his name) and the
+% PickCube split between Wong Pak Hung Philip (data size) and Yang Haoran
+% (backbone); the PickCube report and its run directory, covering both tracks,
+% are under Yang Haoran's account.
+% Every member should confirm or correct their own row.
+\todo{Each member confirms their row.}
+{\small
+\begin{tabularx}{\linewidth}{@{}p{0.17\linewidth}YY@{}}
+  \toprule
+  Member & Contribution & Supporting evidence \\
+  \midrule
+  Chu Jiajie & PegInsertionSide backbone comparison (Transformer and MLP). &
+  Group assignment sheet; results recorded in the PegInsertionSide note
+  under \texttt{dp-manip/docs}. \\
+  Jin Qizheng & StackCube data-size study ($N=25$ to 400) and its report;
+  provided the $N=100$ UNet baseline runs for the StackCube backbone
+  comparison. & \texttt{report\_stackcube\_scaling.md},
+  \texttt{handoff\_lusen\_n100.md}; pull requests 9 and 14 of the integration
+  repository. \\
+  Lu Sen & StackCube backbone comparison; early development of the training
+  and evaluation framework; presents the data-size and backbone studies. &
+  Member report \texttt{task2\_backbone}; presentation plan. \\
+  Shao Chuncheng & LiftPegUpright (replacing PlugCharger), data-size study. &
+  Member report \texttt{task6}. \\
+  Song Zirui & LiftPegUpright backbone comparison; cluster job template; early
+  development of the training and evaluation framework; presents demonstration
+  generation, policy setup, and baselines. & Member report
+  \texttt{task6\_backbone}; pull request 1 of the integration repository;
+  presentation plan. \\
+  Wang Bowen & PushCube data-size study and backbone comparison. & Member
+  report \texttt{task3}. \\
+  Wong Pak Hung Philip & PickCube data-size study; presents the research
+  questions and task selection. & Group assignment sheet; presentation plan. \\
+  Yang Haoran & PickCube backbone comparison with cost measurements, and the
+  PickCube report; Moore Threads reproduction and the attention fix; early
+  framework development; maintenance of the integration repository. &
+  \texttt{report\_pickcube\_yhr.md}; branch
+  \texttt{moore-transformer-attn-fix}; integration pull requests. \\
+  Yang Qihang & PullCube data-size study and backbone comparison (26 runs). &
+  Member report \texttt{report\_pullcube\_yqh.md}. \\
+  Yu Houcheng & Training and evaluation pipeline (\texttt{dp-manip}) and
+  demonstration generator; PegInsertionSide experiments and diagnosis;
+  PlaceSphere data-size study; failure-guidance and takeover-correction
+  studies; cross-task results summary; presents the failure-correction study.
+  & Commit history of \texttt{dp-manip} and \texttt{maniskill-demogen};
+  experiment notes under \texttt{dp-manip/docs}; presentation plan. \\
+  \bottomrule
+\end{tabularx}}
+
+\section{LLM Usage Statement}
+\todo{One row per affected section or component, covering coding, analysis,
+literature assistance, and language editing, including grammar and wording.
+Name the tool, what it contributed, and how the group verified the output. The
+first two rows cover only the report drafting, not earlier project work.}
+{\small
+\begin{tabularx}{\linewidth}{@{}p{0.2\linewidth}p{0.18\linewidth}YY@{}}
+  \toprule
+  Section / component & Tool & Contribution & Verification by the group \\
+  \midrule
+  Report scaffold & OpenAI Codex; Claude Code & Section structure, placeholder
+  tables, cross-check against the course requirements, compilation and layout
+  checks & \pending \\
+  Abstract, Sections 1--6, Tables 1--5, Figure 2 & Claude Code & First draft
+  of the text from the repository's configurations, code, and experiment
+  notes; transcription of table values from the group's results summary and
+  member reports; plotting script; bootstrap intervals for PlaceSphere in
+  Section 4.1; lookup of reference metadata & \pending \\
+  \pending & \pending & \pending & \pending \\
+  \bottomrule
+\end{tabularx}}
+
+\section{Reproducibility and Acknowledgments}
+% Repository names are from the top-level README of the integration repository.
+Code is organized in three repositories: the course integration repository
+\texttt{hryang1130/7606C}, the training and evaluation pipeline
+\texttt{hollinsStuart/dp-manip}, and the demonstration generator
+\texttt{hollinsStuart/maniskill-demogen}. Every run records its resolved
+configuration, selected demonstration seeds, and normalization statistics.
+\todo{Give the commit of each repository used for the reported runs, and links
+to the generated datasets, the trained checkpoints, and a six-task video index
+covering expert generation and policy rollouts. Verify that the links are
+accessible to the teaching team.}
+
+We use ManiSkill and its motion-planning solvers~\citep{tao2024maniskill3}.
+The UNet denoiser is the implementation shipped with the ManiSkill Diffusion
+Policy baseline, which derives from the Diffusion Policy
+code~\citep{chi2023diffusion}; the Transformer denoiser follows the
+transformer variant of the same code; and the noise scheduler comes from the
+\texttt{diffusers} library. Experiments ran on the HKU CS GPU Farm and on a
+Moore Threads server provided for the course.

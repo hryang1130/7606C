@@ -1,23 +1,35 @@
-% Suggested final budget: abstract + introduction = 0.75 page.
+% Suggested final budget: abstract + introduction = 0.6 page.
 \section{Introduction and Research Questions}
 \label{sec:introduction}
-Diffusion Policy models action sequences using conditional denoising and combines
-visual conditioning with receding-horizon execution~\citep{chi2023diffusion}.
-ManiSkill provides a simulation platform for evaluating manipulation
-policies~\citep{tao2024maniskill3}.
+Diffusion Policy models action sequences with conditional denoising and
+executes them in a receding horizon~\citep{chi2023diffusion}. It is usually
+reported with a generous, fixed number of demonstrations and one network
+design. Whoever has to collect the demonstrations is left with practical
+questions: how many are needed for a given skill, how much the answer depends
+on the denoising network, and, once a trained policy fails in a recognizable
+way, whether it is better to add more demonstrations or to show the policy how
+to recover, as interactive imitation learning suggests~\citep{ross2011dagger}.
+We study these questions in ManiSkill~\citep{tao2024maniskill3}, where
+demonstrations can be generated at will and policies can be evaluated on many
+controlled initial conditions.
 
-\todo{Explain why demonstration requirements may differ across manipulation
-skills. State the motivation for the selected six tasks and distinguish the
-baseline implementation from the additional research contribution.}
+\textbf{RQ1 (data efficiency, all six tasks).} How does the number of successful
+expert demonstrations affect held-out closed-loop success for RGB Diffusion
+Policies, and how does this depend on the task?
 
-\textbf{Primary question.} How does the number of successful expert
-demonstrations affect held-out closed-loop success for RGB Diffusion Policies?
+\textbf{RQ2 (backbone, five tasks).} What success--efficiency trade-offs are
+observed between the implemented UNet, Transformer, and MLP denoisers under the
+same experimental protocol?
 
-\textbf{Secondary question.} What success--efficiency trade-offs are observed
-between the implemented UNet, Transformer, and MLP denoisers under the same
-experimental protocol?
+\textbf{RQ3 (failure correction, one task).} Does fine-tuning on expert takeover
+corrections collected at the policy's own failure states improve success beyond
+fine-tuning on an equal amount of ordinary demonstrations?
 
-\todo{Confirm the final investigation scope and list only completed
-contributions: six-task collection and baselines; a controlled data-size study;
-and a backbone comparison on a justified subset, if available. State which tasks
-are included in each study.}
+\textbf{Contributions.} We build a pipeline that generates and checks
+motion-planned demonstrations and trains a baseline on each of six tasks
+(\cref{sec:data,sec:method}); run a data-size study on all six
+(\cref{sec:datasize}); compare three denoising backbones on five tasks, with
+cost measurements and a reproduction on a Moore Threads GPU
+(\cref{sec:backbone,sec:moore}); test expert takeover corrections against a
+matched-data control (\cref{sec:takeover}); and diagnose a negative result on
+PegInsertionSide (\cref{sec:discussion}).

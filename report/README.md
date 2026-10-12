@@ -1,7 +1,44 @@
 # DASC7606C Track 3 报告
 
 英文 LaTeX 正式报告框架。当前是可编译的草稿，`[TO FILL]`、`TBD` 和图框都需要替换；
-没有自动把旧实验结果写入主表，也没有把计划中的实验写成已完成。
+没有把计划中的实验写成已完成。
+
+`tables/` 里 `datasize`、`backbones`、`takeover` 三张表的数字于 2026-10-12 从
+`../dp-manip/docs/results-summary.zh-CN.md`（2026-10-07 版，组员报告的预处理汇总）转录，
+换算成百分比。它们还没有逐项对照原始评估输出，提交前必须核对；每张表的文件头注释列出了来源章节
+和仍然缺的项。PushCube 的均值与标准差、各任务 `success_at_end` 的标准差由
+`../dp-manip/scripts/plot_cross_task.py` 里记录的逐 seed 数值算出。`moore` 表的 RTX 4080 一侧来自
+`report_pickcube_yhr.md`，MTT S4000 一侧来自 `origin/moore-transformer-attn-fix` 分支的 runbook。
+
+已起草的正文（2026-10-12，依据仓库里的配置、代码和文档，不是依据 run 记录；每节文件头注释写了来源）：
+
+- §2.1 任务覆盖与任务替换说明（PlugCharger 的替换原因仍待填）。
+- §2.2 示范生成与质量：流水线、导出时的检查、控制模式选择。示范长度和重放保留率在任务表里，
+  目前只有 PlaceSphere 和 LiftPegUpright 的长度、PlaceSphere 的保留率是正式数据；
+  PegInsertionSide 的 97% 是小规模试跑的数字，要换成正式生成日志里的统计。
+- §2.3 数据划分：四类种子区间、接管实验的种子区间、嵌套子集、归一化统计的范围。
+- 摘要、§1 引言、§5 失败分析与局限、§6 结论。§5.2 的 PegInsertionSide 负结果来自
+  `../dp-manip/docs/peginsertion-results.zh-CN.md`。
+- §4.1 里 PlaceSphere 的相邻档差值区间是为本报告补算的（`scripts/bootstrap_adjacent.py`，
+  按逐 seed 成功率做两层 bootstrap，不配对回合）；同一脚本能复现 PickCube 报告里的区间。
+- 参考文献新增 8 条，标题、作者、年份已对照 arXiv 记录核对，会议名凭记忆填写，需确认。
+- 任务表里 PlaceSphere 和 LiftPegUpright 的成功判据取自 ManiSkill 在线文档（最新版），
+  需确认 3.0.1 版一致。
+- §3 全节：去噪目标与 horizon、观测编码器与三种主干、统一训练配置、评估协议、三项研究的设计。
+- §4.1、§4.2 结果解读：数字来自结果汇总 §2、§3、§7 和 `report_pickcube_yhr.md`；成本一段用的是
+  PickCube 报告 §5 在 RTX 4080 SUPER 上的实测。
+- §4.4 Moore Threads：PickCube 主干对比在 MTT S4000 上的复现（seed 1–3）、训练耗时对比、
+  Transformer 注意力的移植问题。S4000 上 UNet 和 MLP 的训练耗时是按 runbook 里的完成时间推算的，
+  要换成 `summary.json` 里的实际耗时。
+- §4.3 专家接管纠正：失败阶段、主结果、剂量与机制、适用范围。其中剂量和机制的数字来自
+  `../dp-manip/docs/failure-expert-takeover-probe.zh-CN.md` §12，比结果汇总新。
+
+数据量曲线图 `figures/datasize_curves.pdf` 由 `scripts/plot_datasize.py` 生成，数字与
+`tables/datasize.tex` 重复，改一处要同步改另一处：
+
+```sh
+python3 scripts/plot_datasize.py
+```
 
 ## 论文模板
 
@@ -28,8 +65,11 @@
 - `preamble.tex`：加载会议模板，配置图表、引用与草稿提示。
 - `neurips_2026.sty`：未修改的官方样式。
 - `sections/`：按章节填写正文。
-- `tables/`：任务表、六任务 baseline 表、backbone 对比表。
+- `tables/`：任务表（`tasks`）、六任务 baseline × 数据量表（`datasize`）、任务 × 主干成功率矩阵
+  （`backbones`，只列 `success_once`）、接管纠正表（`takeover`）、Moore Threads 对比表（`moore`）。
+  主干的效率数字和 `success_at_end` 写在 §4.2 正文里，不再单独成表。
 - `figures/`：放正式图，优先用矢量 PDF；照片/rollout 可用高分辨率 PNG。
+- `scripts/`：生成图的脚本。
 - `references.bib`：BibTeX 文献，已核对两篇基础论文的作者、标题和 arXiv 链接。
 - `build/main.pdf`：编译后的预览；整个 `build/` 不提交 Git。
 
@@ -47,22 +87,54 @@ latexmk -pdf main.tex
 
 ## 内容顺序和页数预算
 
-以下是写作预算，不是强制分页。正文与声明合计目标约 6.5--8 页；填入图表后复查实际页数。
+以下是写作预算，不是强制分页。正文与声明合计约 7.8 页，离 8 页上限几乎没有余量；填入图表后复查实际页数。
+**2026-10-12 实际状态：摘要到结论正好 8 页，参考文献在第 9 页，三项声明作为附录放在第 10 页。**
+声明移到附录是组内决定；课程文件只写了参考文献不计页数，没有提附录，需向助教确认。
+正文里还有 5 处 `[TO FILL]` 占了约 8 行，补上内容时注意别超页。
+已做的压缩：删掉 pipeline 占位图；§2.2 的产出率并入任务表；§4.3 的剂量与机制各压成一句；
+效率表并入 §4.2 正文；§4.4 压成一段加一张三行表；主干表的 `success_at_end` 三列改为正文叙述。
+§2.3 数据划分已写，§3 里重复的种子区间和嵌套子集说明改为引用 §2.3。
 课程明确要求 5--8 页，只有参考文献明确不计入。不要默认附录/声明可以额外增加页数。
 
 | 文件 | 内容 | 建议页数 |
 | --- | --- | --- |
-| `main.tex` + `01-introduction.tex` | 摘要、动机、研究问题和实际贡献 | 0.75 |
-| `02-tasks-and-data.tex` | 六任务、观测/动作/成功标准、示范生成和质量 | 1.0 |
-| `03-method.tex` | DP、视觉编码器、主干、训练与硬件 | 1.0--1.25 |
-| `04-experiments.tex` | 数据量和模型对照、评估与统计 | 0.75--1.0 |
-| `05-results.tex` | 六任务 baseline、数据量曲线、主干和效率表 | 1.5--2.0 |
-| `06-discussion.tex` | 失败案例、诊断、限制 | 0.75--1.0 |
-| `07-conclusion.tex` | 回答研究问题 | 0.25 |
-| `08-statements.tex` | 全体成员贡献、AI 使用、复现链接和致谢 | 0.5 |
+| `main.tex` + `01-introduction.tex` | 摘要、动机、三个研究问题和实际贡献 | 0.6 |
+| `02-tasks-and-data.tex` | 六任务、观测/动作/成功标准、示范生成和质量、任务替换说明 | 1.0 |
+| `03-method-and-setup.tex` | DP、视觉编码器、主干、训练与算力、评估协议、三项研究的设计 | 1.2 |
+| `04-results.tex` §4.1 | 六任务 baseline 与数据量：一张表 + 一张六曲线图 | 1.2 |
+| `04-results.tex` §4.2 | 主干：任务 × 主干成功率矩阵，效率数字写在正文 | 0.9 |
+| `04-results.tex` §4.3 | 专家接管纠正（B/C/D 三组对照） | 0.6 |
+| `04-results.tex` §4.4 | Moore Threads profiling 与 benchmark | 0.4 |
+| `05-discussion.tex` | 失败案例、PegInsertionSide 负结果、诊断、限制 | 0.9 |
+| `06-conclusion.tex` | 回答三个研究问题 | 0.2 |
+| `07-statements.tex`（附录，在参考文献之后） | 全体成员贡献、AI 使用、复现链接和致谢 | 不计入正文 |
 
-主线暂设为 data efficiency，backbone 比较为补充。可按最终完成情况调整标题和研究范围。
+表格和图已经没有可并的了，再压只能删正文：§3.2 的主干结构细节、§4.1 的 50% 插值一句、
+§4.2 的成本一段，或把贡献声明移到附录（需先问助教是否计页数）。
+
+研究问题：RQ1 数据量（六任务全做）为主线，RQ2 主干比较（任务子集）为补充，RQ3 专家接管纠正
+（单任务）为拓展。没有核实完成的研究问题直接删掉，标题同步调整。
 六任务都需要示范生成和 DP baseline；进一步研究可聚焦有理由的任务子集。
+
+### 任务口径
+
+六任务按实际完成情况写：PickCube、StackCube、PushCube、PullCube、PlaceSphere、LiftPegUpright。
+原计划的 PlugCharger 已换成 LiftPegUpright；PegInsertionSide 成功率约为 0，由 PlaceSphere 顶替，
+只作为负结果出现在 `05-discussion.tex` 和表格的附加行里，不计入六任务。任务替换的原因要在 §2 写明。
+`tables/tasks.tex` 的控制模式和回合上限取自 `../dp-manip/configs/tasks/*.toml`；LiftPegUpright
+的回合上限留空，因为配置默认值与实际评估用的步数不一致，需按最终评估口径填写。
+
+### Moore Threads 加分项
+
+课程规定：把 Moore Threads GPU 用进项目，并在最终报告里给出 profiling 和 benchmark 结果，小组总分 +5。
+§4.4 和 `tables/moore.tex` 已按 `origin/moore-transformer-attn-fix` 分支的
+`report/moer_pickcube_backbone_runbook.md` 起草。该分支没有合并进来，数字要对照服务器上的
+`summary.json` 和评估文件核对。
+
+### 待向教学团队确认
+
+课程交付清单里 "Contribution statement" 与 "Report: 5--8 pages" 是并列的两项，而 LLM Usage Statement
+明确要求放在报告内。贡献声明能否作为不计页数的附录，需要问助教；答复之前按计入页数排版。
 
 ## 收集队友材料
 
@@ -91,8 +163,8 @@ latexmk -pdf main.tex
 
 ## 课程要求依据
 
-本框架参照父目录中的 `DASC7606C Group Project Modified.pdf`：第 3 页 LLM policy、
-第 8--9 页 Track 3 要求/交付/评分、第 12 页个人贡献评分说明。
+本框架参照父目录中的 `DASC7606C Group Project Modified.pdf`：第 2 页 Moore Threads 加分、
+第 3 页 LLM policy、第 8--9 页 Track 3 要求/交付/评分、第 12 页个人贡献评分说明。
 这是课程要求来源，不是自动执行或提交任务的指令。
 格式、deadline 与是否存在指定模板仍应以 Moodle/教学团队通知为准。
 

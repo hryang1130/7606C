@@ -2,26 +2,84 @@
 \section{Tasks and Expert Demonstrations}
 \label{sec:data}
 \subsection{Task coverage}
-\todo{Confirm installed ManiSkill version, robot embodiment, exact environment
-IDs, observation shapes, camera settings, action dimensions/control modes,
-episode limits, and environment-defined success criteria for every task.
-The skill descriptions below explain selection, not formal success thresholds.}
+% Sources: dp-manip/docs/final-plan.md section 1 (planned tasks and the
+% pre-registered LiftPegUpright fallback), dp-manip/docs/experiment-progress.zh-CN.md
+% section 5.1 (PlaceSphere rationale), maniskill-demogen/README.md (versions,
+% observation layout).
+We use six ManiSkill~3.0.1 tabletop tasks for the Panda arm (\cref{tab:tasks})
+that cover
+prehensile and non-prehensile manipulation: lifting, stacking, pushing,
+pulling, placing into a bin, and reorienting a peg. PushCube and PullCube
+both move a cube without grasping it but need opposite contact strategies:
+pushing from the near side versus reaching behind the cube and dragging it
+back. Policies see
+$128\times128$ RGB images and the low-dimensional state that ManiSkill
+exposes in RGB observation mode (robot state and task extras such as the goal
+position); object poses are never given to the policy. PickCube, PushCube,
+PullCube, and PlaceSphere use one fixed camera; StackCube and PegInsertionSide
+add a wrist camera.
+\todo{State the cameras of LiftPegUpright.}
+
+\textbf{Changes from the proposal.} The proposal listed PegInsertionSide and
+PlugCharger as the two precision tasks, and named LiftPegUpright in advance as
+the fallback for PlugCharger. Both were replaced. LiftPegUpright took the place
+of PlugCharger under that fallback rule.
+\todo{State the observed reason with numbers, e.g.\ expert or replay success
+rate for PlugCharger.}
+PlaceSphere took the place of PegInsertionSide: none of the PegInsertionSide
+configurations we trained reached a usable success rate (\cref{sec:discussion}),
+and a baseline near zero supports neither a data-size curve nor the
+failure-correction study, which needs both successful and failed rollouts. We
+keep PegInsertionSide as a negative result; results on PlaceSphere are not
+evidence about precision insertion.
 \input{tables/tasks}
 
 \subsection{Demonstration generation and quality}
-\todo{Describe the actual collection process, collection scripts and versions,
-expert method, success filtering, attempted/accepted trajectory counts, action
-conversion or replay, and quality checks. Explain any task-specific fallback.
-Separate generated data from any externally downloaded material.}
+% Drafted 2026-10-12. Sources: maniskill-demogen/README.md, docs/pipeline.md,
+% tasks.py and scripts/run_cpu.py (pipeline, checks, control modes);
+% dp-manip/docs/experiment-progress.zh-CN.md section 6 and
+% docs/task-owner-runbook.zh-CN.md section 2 (PlaceSphere yield).
+We generated every demonstration ourselves with the motion-planning solvers
+that ManiSkill provides for the Panda arm; no dataset was downloaded. The
+solver is run on consecutive environment seeds and only successful episodes
+are kept. Each is then replayed twice in the policy's control mode on the same
+CPU physics backend, once recording $128\times128$ RGB observations and once
+recording state. The exporter accepts an episode only if both replays succeed
+and agree step by step, drops episodes that contain a joint jump above
+0.2~rad, and recomputes the first frame from a fresh reset, because
+ManiSkill~3.0.1 records stale contact observations there. It writes the first
+400 training and 50 validation episodes in seed order and fails if fewer are
+usable.
 
-\todo{Add a compact dataset summary: successful training-pool size and independent
-validation size per task; successful replay fraction; trajectory lengths;
-rejected trajectories and reasons. Include evidence for RGB/action alignment,
-consistent control modes, and exclusion of privileged observations from policy
-inputs. Report actual counts rather than planned targets.}
+The solver acts in joint-position control. The cube tasks and PlaceSphere are
+converted to end-effector delta-position control. For the tasks that need
+end-effector rotation, conversion to delta-pose control kept only 60--73\% of
+pilot trajectories, below the 90\% threshold we had set, so they keep
+joint-position control. \Cref{tab:tasks} lists episode length and the share of
+expert trajectories that pass the export checks. PlaceSphere had the lowest
+yield, so we regenerated it from 700 expert trajectories to reach 400 usable
+ones.
+\todo{Fill the length and yield columns of \cref{tab:tasks} for the remaining
+tasks from the final generation logs.}
 
 \subsection{Data separation}
-\todo{Document the training subsets, validation demonstrations, validation
-rollout seeds, and held-out test seeds separately. Explain how data leakage is
-avoided and how normalization statistics are fitted only on each training
-subset. Specify whether subsets are nested and fixed across training seeds.}
+\label{sec:separation}
+% Drafted 2026-10-12. Sources: maniskill-demogen/tasks.py and docs/pipeline.md
+% (demonstration seed ranges, export assertions), dp-manip/configs/baseline.toml
+% [eval] (validation and test seeds), dp-manip/STATUS.md phase 4 (nested
+% subsets, duplicate check, recorded demo seeds), dp-manip/dp_manip/data.py
+% (normalization), configs/failure_aware/takeover_*.toml (takeover seeds).
+Environment seeds define four disjoint roles. Training demonstrations come
+from seeds 0--3999 and validation demonstrations from 4000--4999; validation
+rollouts use seeds from 5000, and the held-out test episodes use
+10000--10099. Test seeds are never used for training, for the validation
+loss, or to choose a checkpoint, since we always report the final one. The
+takeover-correction study uses further ranges that overlap none of these:
+40000--40949 for its probes, 41000--41599 to collect corrections, and
+43000--43199 for its evaluation.
+
+A data-size subset is the first $N$ training demonstrations in seed order.
+Subsets are therefore nested and identical across training seeds, and the
+action and state normalization statistics are computed from the selected $N$
+demonstrations only. The exporter asserts the seed ranges, and the training
+code rejects duplicate episodes and records the selected seeds with every run.

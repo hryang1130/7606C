@@ -1,0 +1,122 @@
+% Suggested final budget: 1.2 pages. Merges the former Method and Experimental
+% Design sections; keep each subsection to one or two short paragraphs.
+%
+% Drafted 2026-10-12 from the repository, not from run records. Sources:
+% dp-manip/configs/baseline.toml and configs/experiments/*.toml (hyperparameters,
+% seeds), dp-manip/dp_manip/{policy,vision,observation_encoder,data}.py and
+% backbones/*.py (architecture, normalization, sampling), dp-manip/PLAN.md
+% (protocol), configs/failure_aware/takeover_*.toml and
+% docs/failure-expert-takeover-probe.zh-CN.md sections 7-9 (takeover study).
+% Check each statement against run.json of the evaluated runs.
+\section{Method and Experimental Setup}
+\label{sec:method}
+\subsection{Conditional action denoising}
+For observation history $o$ and clean action sequence $a^{(0)}$, the policy is
+trained with the noise-prediction objective of Diffusion
+Policy~\citep{chi2023diffusion,ho2020ddpm},
+\begin{equation}
+  \mathcal{L}(\theta)=
+  \mathbb{E}_{o,a^{(0)},k,\epsilon}
+  \left[\left\|\epsilon-
+  \epsilon_\theta\!\left(
+  \sqrt{\bar\alpha_k}a^{(0)}+
+  \sqrt{1-\bar\alpha_k}\epsilon,k,o\right)
+  \right\|_2^2\right],
+  \label{eq:denoising}
+\end{equation}
+where $k$ is the diffusion timestep and $\epsilon\sim\mathcal{N}(0,I)$. The
+policy observes the last $T_o=2$ steps, predicts $T_p=16$ actions, and executes
+$T_a=8$ of them, starting at the current step, before replanning. Each action
+dimension is scaled to $[-1,1]$ with the minimum and maximum over the training
+subset and mapped back before execution. We use the squared-cosine
+noise schedule~\citep{nichol2021improved} with 100 steps for both training and
+sampling.
+
+\subsection{Observation encoder and backbones}
+Each RGB frame is scaled to $[-1,1]$ and encoded by a
+ResNet-18~\citep{he2016resnet} with group normalization~\citep{wu2018groupnorm},
+trained from scratch, followed by global average pooling and a projection to
+128 features; cameras share one encoder. Images are randomly shifted by up to
+4 pixels during training~\citep{kostrikov2021drq}. The image features are concatenated
+with the standardized low-dimensional state, giving one feature vector per
+observation step.
+
+The three noise-prediction backbones receive the same feature sequence and
+differ only in how they consume it. The \textbf{UNet} is the 1D convolutional
+network of Diffusion Policy as shipped with the ManiSkill baseline, used
+unmodified (channel widths 256/512/1024, kernel size 5), with
+FiLM conditioning~\citep{perez2018film} on the flattened observation
+features. The \textbf{Transformer} is a causal
+decoder over action tokens that attends to a timestep token and the observation
+tokens (8 layers, 4 heads, width 256, attention dropout 0.3). The \textbf{MLP}
+has three hidden layers of width 256 over the concatenation of the flattened
+noisy actions, a timestep embedding, and a 256-dimensional projection of the
+observation features.
+The Transformer follows the transformer variant of the Diffusion Policy
+repository and the MLP is our own baseline design; both were ported from an
+earlier codebase of our group without changing their structure.
+
+\subsection{Shared training configuration and compute}
+All runs share one configuration: AdamW~\citep{loshchilov2019adamw} with
+learning rate $10^{-4}$,
+$\beta=(0.95,0.999)$ and weight decay $10^{-6}$; 500 warm-up steps followed by
+cosine decay; batch size 64; gradient clipping at 1.0; mixed precision; and an
+exponential moving average of the weights with decay 0.9999. Every run trains
+for 100k optimizer steps regardless of task, backbone, or $N$, and we evaluate
+the averaged weights of the final checkpoint. Checkpoints at 10k, 30k, and 60k
+steps are kept for diagnostics only. The only per-task settings are the control
+mode and the episode horizon (\cref{tab:tasks}).
+\todo{Name the hardware for every study (HKU GPU Farm RTX 4080 nodes; Moore
+Threads GPU model), the typical wall-clock time per run, and which results were
+produced on which device.}
+
+\subsection{Evaluation protocol}
+Policies are evaluated in closed loop on the same CPU physics backend that
+generated the demonstrations. Each trained run is tested on 100 episodes with
+reset seeds 10000--10099, held out as described in \cref{sec:separation}.
+Sampling noise uses a fixed seed.
+\metriconce{} counts an episode in which the success condition holds at any
+step and is our primary metric; \metricend{} requires it to hold at the final
+step. Validation loss and rollouts from training seeds serve only as
+diagnostics.
+
+We report the mean and sample standard deviation over training seeds.
+Differences between adjacent data sizes or between backbones are assessed with
+a two-level bootstrap that resamples training seeds and then evaluation
+episodes; we call a difference distinguishable when its 95\% interval excludes
+zero.
+Exceptions to this procedure and to the shared horizon and split are listed
+in \cref{sec:limits}.
+
+\subsection{Study designs}
+\textbf{Data size (RQ1).} For each task we train the UNet baseline on
+$N\in\{25,50,100,200\}$ demonstrations, with 3 training seeds for $N\le50$ and
+5 for $N\ge100$. Subsets are nested and fixed across training seeds
+(\cref{sec:separation}), so the training seed changes only the initialization
+and batch order. $N=400$ (5 seeds) is added for a
+task only when its $100\rightarrow200$ gain is distinguishable from zero, a
+rule fixed before the runs. Because the step budget is fixed, smaller subsets
+are revisited more often rather than trained for fewer steps.
+
+\textbf{Backbone (RQ2).} At $N=100$ we compare the three backbones with 5
+training seeds each. The UNet arm reuses the data-size runs, and the resolved
+configurations of the three arms differ only in the backbone selector. The
+backbones differ widely in size (\cref{sec:backbone}), so the comparison is
+between these implementations, not between architecture families at equal
+capacity.
+The comparison covers PickCube, StackCube, PushCube, PullCube, and
+LiftPegUpright, and was also run on PegInsertionSide; it was not run on
+PlaceSphere.
+
+\textbf{Takeover correction (RQ3).} On PlaceSphere, starting from the three
+$N=100$ UNet baseline checkpoints, a trigger that reads privileged simulator
+state detects a missed grasp during a rollout (the gripper has closed on
+nothing and the sphere has not been lifted), and a scripted expert takes over,
+regrasps, and places the sphere. For each checkpoint we collect 100 successful
+corrections from its own rollouts. Three arms are compared: B, the baseline;
+C, fine-tuned on the original 100 demonstrations plus the corrections; and D,
+fine-tuned on the original 100 plus ordinary demonstrations with at least as
+many training windows. C and D share the fine-tuning settings (learning rate
+$3\times10^{-5}$, 10k steps), and all arms are evaluated on the same 200 new
+seeds per checkpoint. Trigger, expert, arms, and decision rule were fixed
+before the corrections were collected.

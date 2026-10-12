@@ -1,19 +1,46 @@
+% Sources (all to be confirmed against the evaluated runs):
+% - control mode, horizon: dp-manip/configs/tasks/*.toml. LiftPegUpright's
+%   horizon is left open: the config default (50) differs from the horizons
+%   used in evaluation (200 and 400).
+% - action dim: dp-manip/docs/results-summary.zh-CN.md section 1.
+% - 400 / 50 demonstrations: the exporter keeps exactly the first 400 / 50
+%   usable demonstrations per split (maniskill-demogen/tasks.py) and fails if
+%   there are fewer; confirm the counts in each export_info.json.
+% - demo length: PlaceSphere from dp-manip/docs/experiment-progress.zh-CN.md
+%   section 6; LiftPegUpright from results-summary section 5.
+% - replay kept: PlaceSphere 298 of 440 in the first generation
+%   (task-owner-runbook section 2). PegInsertionSide's 97% is a pilot figure
+%   (34 of 35, maniskill-demogen/tasks.py); replace it with the final log. The
+%   cube tasks were close to 100% in pilots and are left open.
+% - success rule: dp-manip/docs/final-plan.md section 1 for the original
+%   tasks; PlaceSphere and LiftPegUpright from the ManiSkill task documentation
+%   (maniskill.readthedocs.io, latest version, read 2026-10-12); confirm that
+%   version 3.0.1 uses the same conditions.
 \begin{table}[htbp]
   \centering
-  \caption{Selected task coverage. Fill control modes and success criteria from
-  the exact environment versions used in the completed experiments.}
+  \caption{Task coverage (ManiSkill \texttt{-v1} environments), with the
+  action dimension in parentheses. Horizon is the evaluation episode limit and
+  demo length the training-episode length, in steps. Replay kept is the share
+  of expert trajectories that pass the export checks. Every task has 400
+  training and 50 validation demonstrations.}
   \label{tab:tasks}
   \small
-  \begin{tabularx}{\linewidth}{@{}lYp{0.19\linewidth}p{0.2\linewidth}@{}}
+  \setlength{\tabcolsep}{3.5pt}
+  \begin{tabularx}{\linewidth}{@{}llcccc>{\raggedright\arraybackslash}X@{}}
     \toprule
-    Task & Skill covered & Action/control & Formal success rule \\
+    Task & Skill & Control & Horizon &
+    \shortstack{Demo length\\median (range)} & \shortstack{Replay\\kept} &
+    Success rule \\
     \midrule
-    PickCube & Pick and lift & \pending & \pending \\
-    StackCube & Placement and stacking & \pending & \pending \\
-    PushCube & Non-prehensile pushing & \pending & \pending \\
-    PullCube & Non-prehensile pulling & \pending & \pending \\
-    PegInsertionSide & Contact-rich insertion & \pending & \pending \\
-    PlugCharger & Alignment and insertion & \pending & \pending \\
+    PickCube & Grasp, lift & EE $\Delta$pos (4) & 100 & \pending & \pending & Cube within 2.5 cm of goal, robot static \\
+    StackCube & Grasp, stack & EE $\Delta$pos (4) & 200 & \pending & \pending & Cube A on cube B, released, static \\
+    PushCube & Push & EE $\Delta$pos (4) & 100 & \pending & \pending & Cube inside goal region \\
+    PullCube & Pull & EE $\Delta$pos (4) & 100 & \pending & \pending & Cube inside goal region \\
+    PlaceSphere & Grasp, place & EE $\Delta$pos (4) & 200 & 113 (90--150) & 68\% & Sphere on the bin, robot static, gripper open \\
+    LiftPegUpright & Reorient & Joint pos (8) & \pending & 169 (153--702) & \pending & Peg upright within 0.08 rad, resting on the table \\
+    \midrule
+    \multicolumn{7}{@{}l}{\textit{Attempted, reported as a negative result; not one of the six}} \\
+    PegInsertionSide & Insert & Joint pos (8) & 300 & \pending & 97\% & Peg head inside hole \\
     \bottomrule
   \end{tabularx}
 \end{table}

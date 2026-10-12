@@ -1,0 +1,65 @@
+% Suggested final budget: 0.9 page.
+% Drafted 2026-10-12. Sources: dp-manip/docs/peginsertion-results.zh-CN.md
+% (5.2), docs/failure-expert-takeover-probe.zh-CN.md sections 7 and 12.2 and
+% docs/results-summary.zh-CN.md sections 3 and 7.4 (5.1),
+% docs/experiment-progress.zh-CN.md section 6 and report/report_pickcube_yhr.md
+% section 6 (5.3), results-summary section 5 (5.4).
+\section{Failure Analysis and Limitations}
+\label{sec:discussion}
+\subsection{Observed failure modes}
+The two metrics separate two kinds of failure. Some policies never reach
+success: on PlaceSphere, where we classified every evaluation episode by
+stage, 374 of the baseline's 600 episodes failed without a stable grasp and
+only 29 after one (\cref{sec:takeover}). Others reach success and lose it. On PushCube the cube enters the goal region and slides
+out again, so the UNet succeeds at some point in 95\% of episodes but at the
+end of only 54\%. On LiftPegUpright the MLP raises the peg in 41\% of episodes
+and lets it fall in most of them (\cref{sec:backbone}).
+\todo{Link rollout videos or episode identifiers for each failure mode, and
+add a stage classification for the other tasks if one was made.}
+
+\subsection{Negative result: PegInsertionSide}
+We trained 32 RGB policies for 100k steps on PegInsertionSide: the data-size
+grid up to $N=200$, the Transformer and MLP backbones at $N=100$, and
+spatial-softmax pooling and end-effector delta-pose control at $N=200$. No
+setting reached 1\% mean success. The best data-size cell, $N=200$, succeeded
+in 2 of 250 validation episodes, and the three backbones in 1, 1, and 0 of 500
+test episodes each. A stage diagnosis of one $N=100$ run on the 100 test
+episodes shows where rollouts stop: 71 grasp the peg, 65 lift it, 18 bring it
+near the hole, 1 aligns it with the hole axis, and none succeeds. From the
+initial states of its own training demonstrations the same policy succeeds in
+10 of 24 episodes, with a median closest lateral error of 1.6~mm against
+80~mm on test states. The policy thus reproduces the motion where it has seen
+it but does not generalize the approach and alignment. Three checks narrow
+the cause without settling it: replaying expert demonstrations in the
+evaluation environment succeeds with identical states and images, executing
+fewer actions per prediction does not help (0 of 12 test successes), and a
+policy given the full simulator state instead of images reaches only 2\% (one
+seed). This result is specific to our data, configuration, and step budget.
+
+\subsection{Diagnostics and interpretation}
+Two diagnostics changed how we read our own numbers. First, the registered
+50-step horizon of PlaceSphere is shorter than every demonstration (90--150
+steps), and all 16 runs scored zero until they were evaluated with 200 steps:
+an evaluation error, not a policy failure. Second, denoising loss is not a proxy
+for success. On PegInsertionSide the training loss falls to $10^{-4}$ while
+success stays at zero, and on PickCube the UNet has the lowest training loss
+and the lowest success; only the validation loss orders the backbones as
+success does.
+
+\subsection{Limits of the comparison}
+\label{sec:limits}
+\textbf{Comparability.} Control mode, horizon, and cameras differ between
+tasks, so we compare curve shapes and orderings, not levels. LiftPegUpright
+was evaluated with a 200-step horizon in the data-size study and 400 steps in
+the backbone study, and some of its demonstrations are longer than both; the
+PegInsertionSide data-size cells use validation rollouts. \textbf{Statistics.}
+Each cell has 3 to 5 training seeds and 100 episodes per seed, and one run
+resolves about $\pm8$ points. The StackCube backbone comparison used a z-test,
+and the LiftPegUpright and PlaceSphere intervals were computed afterwards from
+per-seed rates without pairing episodes. The rule that adds $N=400$ reads the
+test results. \textbf{Configuration.} One set of hyperparameters, a fixed 100k
+steps, and the final checkpoint are used everywhere, which is what exposes the
+UNet's overfitting on PickCube; the backbones also differ in size by a factor
+of about 190. \textbf{Scope.} The backbone comparison is missing on
+PlaceSphere, the takeover study covers one task and relies on privileged
+state, and everything is in simulation with motion-planned demonstrations.

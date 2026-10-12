@@ -1,0 +1,23 @@
+% Values transcribed 2026-10-12 from section 4 of
+% dp-manip/docs/results-summary.zh-CN.md (updated 2026-10-07). Verify against
+% results/takeover-correction/decision.json before submission.
+\begin{table}[htbp]
+  \centering
+  \caption{Takeover-correction study on PlaceSphere, starting from the three
+  $N=100$ UNet baseline checkpoints: 200 fresh evaluation episodes per
+  checkpoint and arm (600 per arm). $\Delta$ is the paired difference to arm B
+  in percentage points with its 95\% bootstrap interval. C$-$D is
+  $+14.3$ [$+9.5$, $+19.0$].}
+  \label{tab:takeover}
+  \small
+  \begin{tabularx}{\linewidth}{@{}lYccc@{}}
+    \toprule
+    Arm & Fine-tuning data & \shortstack{Successes /\\episodes} &
+    \shortstack{\metriconce{}\\(\%)} & \shortstack{$\Delta$ vs.\ B\\(pp) [95\% CI]} \\
+    \midrule
+    B & None (baseline checkpoint) & 197 / 600 & 32.8 & -- \\
+    C & Base demos + takeover corrections & 280 / 600 & 46.7 & $+13.8$ [$+9.3$, $+18.3$] \\
+    D & Base demos + matched extra demos & 194 / 600 & 32.3 & $-0.5$ [$-4.7$, $+3.5$] \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
