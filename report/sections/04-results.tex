@@ -41,7 +41,9 @@ gains $+25.0$ [$+18.2$, $+31.8$] from 100 to 200 and $+17.2$
 $+40.6$ [$+32.6$, $+48.2$] and then $+19.6$ [$+13.6$, $+25.8$], ending at
 96.2\%. PickCube and LiftPegUpright show diminishing
 returns below the ceiling: PickCube gains $+26.0$ [$+19.8$, $+32.2$] and then
-only $+8.2$ [$+1.4$, $+15.0$], stopping at 53.4\%. On the logarithmic axis the
+only $+8.2$ [$+1.4$, $+15.0$], stopping at 53.4\%, and LiftPegUpright gains $+7.4$
+[$+1.4$, $+13.6$] and then $+4.4$ [$-1.4$, $+10.0$], which is not
+distinguishable from zero. On the logarithmic axis the
 curves have a similar shape and differ mainly in position: by interpolation,
 50\% success needs fewer than 25 demonstrations on PullCube, about 27 on
 PushCube, 68 on LiftPegUpright, and close to 130 on StackCube and PlaceSphere.
@@ -50,12 +52,12 @@ One qualification applies. PickCube needs about 300 demonstrations by the same
 measure, more than StackCube, which contains a pick; \cref{sec:backbone} shows
 that this reflects the UNet on this task, so the curves describe this
 configuration, not the tasks in general.
-% The PlaceSphere intervals above were computed for this report with
-% scripts/bootstrap_adjacent.py from the per-seed rates in
-% dp-manip/docs/experiment-progress.zh-CN.md sections 6 and 15. The same script
+% The PlaceSphere and LiftPegUpright intervals above were computed for this
+% report with scripts/bootstrap_adjacent.py, from the per-seed rates in
+% dp-manip/docs/experiment-progress.zh-CN.md sections 6 and 15 (PlaceSphere)
+% and in the member's LiftPegUpright data-size report. The same script
 % reproduces the PickCube intervals of the member report.
-\todo{Add the adjacent-$N$ intervals for LiftPegUpright once its per-seed
-results are available; the member report gives only means.}
+
 
 \subsection{Backbone success and efficiency}
 \label{sec:backbone}

@@ -15,8 +15,7 @@
 % 2026-10-12: the PickCube split between Wong Pak Hung Philip (data size) and Yang Haoran
 % (backbone); the PickCube report and its run directory, covering both tracks,
 % are under Yang Haoran's account.
-% Every member should confirm or correct their own row.
-\todo{Each member confirms their row.}
+% The members confirmed their rows on 2026-10-13.
 {\small
 \begin{tabularx}{\linewidth}{@{}p{0.17\linewidth}YY@{}}
   \toprule
@@ -75,7 +74,7 @@
   Report scaffold & OpenAI Codex; Claude Code & Section structure, placeholder
   tables, cross-check against the course requirements, compilation and layout
   checks \\
-  Abstract, Sections 1--6, Tables 1--5, Figure 2 & Claude Code & First draft
+  Abstract, Sections 1--6, Tables 1--5, Figure 1 & Claude Code & First draft
   of the text from the repository's configurations, code, and experiment
   notes; transcription of table values from the group's results summary and
   member reports; plotting script; bootstrap intervals for PlaceSphere in
@@ -102,8 +101,27 @@ repository history.
 \section{Reproducibility and Acknowledgments}
 % Repository names are from the top-level README of the integration repository.
 % All three were public on GitHub when checked on 2026-10-12.
-Code is public in three repositories. Every run records its resolved
-configuration, selected demonstration seeds, and normalization statistics.
+% Commits: PickCube from report_pickcube_yhr.md; PullCube and LiftPegUpright
+% from the member reports report_pullcube_yqh.md and task6_backbone;
+% PlaceSphere from the run.json files on the cluster (16 runs at 5622b47,
+% clean; 5 N=400 runs at 8085fb9, with uncommitted changes).
+% StackCube (N<=200), PushCube and the LiftPegUpright data-size runs: their
+% reports record no commit. The group stated on 2026-10-13 that they used the
+% first version of the pipeline, before the data loader update. In the
+% integration repository that version is c292bf1: the pipeline code
+% (dp_manip, scripts, configs, slurm) is identical from aeba48c (2026-09-27)
+% to c292bf1, and the preloading data loader arrives with aee97cd
+% (2026-10-01). The StackCube report says its N=400 runs used the optimized
+% data loader, and the LiftPegUpright data-size report records dirty=true.
+% Checked on 2026-10-13 against the run.json files uploaded to the
+% checkpoints release: pickcube n100 s1 records c292bf1 (not the cd36158 that
+% the PickCube report cites for the repository), stackcube n100 s1 records
+% c292bf1, pushcube n100 s1 records 646117e of dp-manip, whose tree is
+% identical to c292bf1:dp-manip, and placesphere n100 s1 records 5622b47. None
+% of the three early runs has data.preload in its configuration.
+\textbf{Code.} Three public repositories hold the code. Every run records its
+resolved configuration, selected demonstration seeds, normalization
+statistics, and code revision.
 \begin{itemize}
   \item Course integration repository, including this report:
   \url{https://github.com/hryang1130/7606C}
@@ -112,10 +130,33 @@ configuration, selected demonstration seeds, and normalization statistics.
   \item Demonstration generator:
   \url{https://github.com/hollinsStuart/maniskill-demogen}
 \end{itemize}
-\todo{Give the commit of each repository used for the reported runs, and links
-to the generated datasets, the trained checkpoints, and a six-task video index
-covering expert generation and policy rollouts. Verify that the links are
-accessible to the teaching team.}
+
+\textbf{Revisions.} The baseline runs of PickCube and StackCube record commit
+\texttt{c292bf1} of the integration repository, and that of PushCube records
+\texttt{646117e} of the pipeline repository, which is the same code: the first
+version of the pipeline. PullCube and the LiftPegUpright data-size runs used
+this version too. Later runs used later revisions: the $N=400$ runs of
+StackCube, with a faster data loader; the PickCube report cites
+\texttt{cd36158} and the LiftPegUpright backbone runs \texttt{f69d175} of the
+integration repository; and PlaceSphere used \texttt{5622b47} ($N\le200$) and
+\texttt{8085fb9} ($N=400$) of the pipeline repository. The LiftPegUpright runs
+and the PlaceSphere $N=400$ runs were made with uncommitted changes in the
+working tree.
+
+\textbf{Data.} The datasets are not hosted. Generation is deterministic, so
+\texttt{./generate.sh <task>} in the demonstration generator reproduces the
+400 training and 50 validation demonstrations of a task, up to floating-point
+differences between machines; PlaceSphere additionally needs
+\texttt{-{}-n-train 700 -{}-n-val 120}.
+
+\textbf{Videos.} The clips shown in the presentation, covering expert
+generation and policy rollouts for all six tasks, are at
+\url{https://github.com/hryang1130/7606C/releases/tag/videos-2026-10-09}.
+
+\textbf{Checkpoints.} For each task, the UNet baseline trained on 100
+demonstrations (training seed 1), with its run record and test evaluation, is
+at \url{https://github.com/hryang1130/7606C/releases/tag/checkpoints-unet-n100}.
+\todo{PullCube and LiftPegUpright are still to be uploaded.}
 
 We use ManiSkill and its motion-planning solvers~\citep{tao2024maniskill3}.
 The UNet denoiser is the implementation shipped with the ManiSkill Diffusion

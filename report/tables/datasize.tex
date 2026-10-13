@@ -7,8 +7,9 @@
 % (~/dp-runs-placesphere/*/eval/test_final_h200.json on the cluster): all 21
 % per-run success counts match, and success_at_end equals success_once in
 % every run.
-% Still open: PushCube success_at_end SD; LiftPegUpright success_at_end under
-% the 200-step horizon used in this table.
+% LiftPegUpright success_at_end at N=100 (200-step horizon) is from the member's
+% data-size report of 2026-10-07, per-seed values 0.66/0.69/0.66/0.70/0.65.
+% Still open: PushCube success_at_end SD.
 % Keep in sync with scripts/plot_datasize.py.
 \begin{table}[htbp]
   \centering
@@ -18,7 +19,7 @@
   (3 for $N\le 50$, 5 for $N\ge 100$). The last column (End) is
   \metricend{} at $N=100$. ``--'': not run, because the pre-registered rule
   adds $N=400$ only when the $100\rightarrow200$ gain is distinguishable from
-  zero. \textit{TBD}: not yet filled.}
+  zero. }
   \label{tab:datasize}
   \small
   \setlength{\tabcolsep}{4pt}
@@ -33,7 +34,7 @@
     PushCube & $45.3\pm3.2$ & $82.3\pm1.5$ & $94.8\pm1.3$ & $96.0\pm1.9$ & -- & 54$^{a}$ \\
     PullCube & $76.7\pm1.2$ & $91.3\pm0.6$ & $95.6\pm0.9$ & $97.2\pm0.4$ & -- & $95.6\pm0.9$ \\
     PlaceSphere & $4.7\pm2.9$ & $25.3\pm4.1$ & $36.0\pm3.6$ & $76.6\pm5.6$ & $96.2\pm0.8$ & $36.0\pm3.6$ \\
-    LiftPegUpright$^{b}$ & $7.0\pm1.0$ & $36.3\pm3.1$ & $67.4\pm2.1$ & $74.8\pm2.8$ & $79.2\pm0.8$ & \pending \\
+    LiftPegUpright$^{b}$ & $7.0\pm1.0$ & $36.3\pm3.1$ & $67.4\pm2.1$ & $74.8\pm2.8$ & $79.2\pm0.8$ & $67.2\pm2.2$ \\
     \bottomrule
   \end{tabularx}
 

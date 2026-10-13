@@ -7,7 +7,8 @@ Episodes are not paired between the two sizes.
 
 The PickCube lines reproduce the intervals of report_pickcube_yhr.md
 (+26.0 [19.8, 32.2] and +8.2 [1.4, 15.0]); the PlaceSphere rates are from
-dp-manip/docs/experiment-progress.zh-CN.md sections 6 and 15.
+dp-manip/docs/experiment-progress.zh-CN.md sections 6 and 15, and the
+LiftPegUpright rates from the member's data-size report.
 Usage: python3 scripts/bootstrap_adjacent.py
 """
 
@@ -27,6 +28,15 @@ RATES = {
         100: [0.32, 0.41, 0.36, 0.39, 0.32],
         200: [0.79, 0.84, 0.77, 0.68, 0.75],
         400: [0.96, 0.97, 0.97, 0.95, 0.96],
+    },
+    # 200-step evaluation, per-seed success_once from the LiftPegUpright
+    # data-size report of 2026-10-07 (tmp/01_data_size.md, section 6).
+    "LiftPegUpright": {
+        25: [0.08, 0.06, 0.07],
+        50: [0.33, 0.39, 0.37],
+        100: [0.67, 0.69, 0.66, 0.70, 0.65],
+        200: [0.76, 0.73, 0.72, 0.74, 0.79],
+        400: [0.79, 0.80, 0.78, 0.80, 0.79],
     },
 }
 
