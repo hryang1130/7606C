@@ -53,5 +53,9 @@ Threads GPU.
 % appendix counts toward the page limit is not stated, so confirm it.
 \clearpage
 \appendix
+% The statement tables cannot break across pages. Without \raggedbottom the
+% page is stretched to full height and the slack opens up between a heading
+% and its table.
+\raggedbottom
 \input{sections/07-statements}
 \end{document}

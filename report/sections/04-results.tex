@@ -119,7 +119,9 @@ recovered 12 of those 16.
 \textbf{Corrections versus more demonstrations.} Fine-tuning on 100
 corrections raises success from 32.8\% to 46.7\% (\cref{tab:takeover}), in the
 same direction for all three checkpoints, while a matched amount of ordinary
-demonstrations leaves it unchanged. The gain grows with the number of
+demonstrations leaves it unchanged. The gain is a net effect: on the same
+seeds, the corrections arm succeeds in 115 episodes where the baseline fails
+and fails in 32 where it succeeds. It grows with the number of
 corrections ($+4.3$ points [$+0.7$, $+7.8$] with 25, $+6.0$ [$+1.7$, $+10.8$]
 with 50), whereas ordinary demonstrations help only in much larger amounts
 ($+18.2$ [$+6.2$, $+33.2$] with 300 extra), roughly four times the training

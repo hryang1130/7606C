@@ -74,7 +74,7 @@
   Report scaffold & OpenAI Codex; Claude Code & Section structure, placeholder
   tables, cross-check against the course requirements, compilation and layout
   checks \\
-  Abstract, Sections 1--6, Tables 1--5, Figure 1 & Claude Code & First draft
+  Abstract, Sections 1--6, Tables 1--5, Figures 1--2 & Claude Code & First draft
   of the text from the repository's configurations, code, and experiment
   notes; transcription of table values from the group's results summary and
   member reports; plotting script; bootstrap intervals for PlaceSphere in
@@ -131,11 +131,11 @@ statistics, and code revision.
   \url{https://github.com/hollinsStuart/maniskill-demogen}
 \end{itemize}
 
-\textbf{Revisions.} The baseline runs of PickCube and StackCube record commit
-\texttt{c292bf1} of the integration repository, and that of PushCube records
-\texttt{646117e} of the pipeline repository, which is the same code: the first
-version of the pipeline. PullCube and the LiftPegUpright data-size runs used
-this version too. Later runs used later revisions: the $N=400$ runs of
+\textbf{Revisions.} The baseline runs of PickCube, StackCube, and PullCube
+record commit \texttt{c292bf1} of the integration repository, and that of
+PushCube records \texttt{646117e} of the pipeline repository, which is the
+same code: the first version of the pipeline. The LiftPegUpright data-size
+runs used this version too. Later runs used later revisions: the $N=400$ runs of
 StackCube, with a faster data loader; the PickCube report cites
 \texttt{cd36158} and the LiftPegUpright backbone runs \texttt{f69d175} of the
 integration repository; and PlaceSphere used \texttt{5622b47} ($N\le200$) and
@@ -156,7 +156,6 @@ generation and policy rollouts for all six tasks, are at
 \textbf{Checkpoints.} For each task, the UNet baseline trained on 100
 demonstrations (training seed 1), with its run record and test evaluation, is
 at \url{https://github.com/hryang1130/7606C/releases/tag/checkpoints-unet-n100}.
-\todo{PullCube and LiftPegUpright are still to be uploaded.}
 
 We use ManiSkill and its motion-planning solvers~\citep{tao2024maniskill3}.
 The UNet denoiser is the implementation shipped with the ManiSkill Diffusion

@@ -4,11 +4,13 @@ The numbers duplicate tables/datasize.tex; change both together. They are
 transcribed from dp-manip/docs/results-summary.zh-CN.md and
 dp-manip/scripts/plot_cross_task.py (PushCube per-seed values), not read from
 run files.
-Usage, from report/: python3 scripts/plot_datasize.py
+Usage, from report/: python3 scripts/plot_datasize.py [extra_output.png ...]
+Extra outputs are written on a white background (the repository README uses one).
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -105,6 +107,9 @@ def main() -> None:
     out = Path(__file__).resolve().parent.parent / "figures" / "datasize_curves.pdf"
     fig.savefig(out, bbox_inches="tight", pad_inches=0.02)
     print(out)
+    for extra in sys.argv[1:]:
+        fig.savefig(extra, dpi=200, bbox_inches="tight", pad_inches=0.08, facecolor="white")
+        print(extra)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@
 
 已起草的正文（2026-10-12，依据仓库里的配置、代码和文档，不是依据 run 记录；每节文件头注释写了来源）：
 
-- §2.1 任务覆盖与任务替换说明（PlugCharger 的替换原因仍待填）。
+- §2.1 任务覆盖与任务替换说明。
 - §2.2 示范生成与质量：流水线、导出时的检查、控制模式选择、默认生成数量（440 / 55，取自
   `maniskill-demogen/tasks.py`）。实测的长度和保留率只有 PlaceSphere 和 LiftPegUpright 有记录，
   写在正文里；任务表不再有这两列，改为列出每个任务的相机数。
@@ -36,6 +36,9 @@
 
 数据量曲线图 `figures/datasize_curves.pdf` 由 `scripts/plot_datasize.py` 生成，数字与
 `tables/datasize.tex` 重复，改一处要同步改另一处：
+
+失败案例图 `figures/failure_cases.pdf` 由 `scripts/make_failure_figure.py <dp-manip/results>` 生成，
+取自汇报用的 rollout 录像（本地 `dp-manip/results/`，不在仓库里），需要 ffmpeg。
 
 ```sh
 python3 scripts/plot_datasize.py
@@ -89,13 +92,13 @@ latexmk -pdf main.tex
 ## 内容顺序和页数预算
 
 以下是写作预算，不是强制分页。正文与声明合计约 7.8 页，离 8 页上限几乎没有余量；填入图表后复查实际页数。
-**2026-10-13 实际状态：摘要到结论约 7.4 页，参考文献在第 9 页，三项声明作为附录放在其后。**
+**2026-10-14 实际状态：摘要到结论占满 8 页（第 8 页约九成），参考文献在第 9 页，三项声明作为附录放在其后。**
 声明移到附录是组内决定；课程文件只写了参考文献不计页数，没有提附录，需向助教确认。
-正文和表格已没有 `[TO FILL]` 或 `TBD`；全篇只剩附录 C 一处：PullCube 和 LiftPegUpright 的
-checkpoint 还没上传到 Release。
+全篇已没有 `[TO FILL]`、`TBD` 或 `\todo`；六个任务的 checkpoint 都已上传到 Release。
 
 复现材料（都在附录 C 里有链接）：
 
+- 报告 PDF：<https://github.com/hryang1130/7606C/releases/tag/report-pdf>
 - 视频：<https://github.com/hryang1130/7606C/releases/tag/videos-2026-10-09>
 - checkpoint（每个任务 UNet、N=100、seed 1，含 `run.json` 和测试评估）：
   <https://github.com/hryang1130/7606C/releases/tag/checkpoints-unet-n100>

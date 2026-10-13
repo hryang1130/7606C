@@ -16,7 +16,10 @@ back. Policies see
 $128\times128$ RGB images and the low-dimensional state that ManiSkill
 exposes in RGB observation mode (robot state and task extras such as the goal
 position); object poses are never given to the policy. Every task uses one
-fixed camera, and StackCube adds a wrist camera.
+fixed camera, and StackCube adds a wrist camera. Actions have 4 dimensions
+under end-effector delta-position control (a Cartesian displacement and a
+gripper command) and 8 under joint-position control (seven joint targets and
+the gripper); \cref{tab:tasks} lists the mode of each task.
 
 \textbf{Changes from the proposal.} The proposal listed PegInsertionSide and
 PlugCharger as its two precision tasks. We could not establish a reliable

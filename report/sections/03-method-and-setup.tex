@@ -67,6 +67,12 @@ the averaged weights of the final checkpoint. Checkpoints at 10k, 30k, and 60k
 steps are kept for diagnostics only. The only per-task settings are the control
 mode and the episode horizon (\cref{tab:tasks}).
 
+Each run trains on a single GPU. On an RTX~4080 SUPER a 100k-step UNet run
+takes 1.7~h and peaks at 2.6~GB of GPU memory (\cref{sec:backbone}). The
+data-size and backbone studies comprise 166 such runs; as one example of the
+per-task budget, the 26 training runs of PushCube and their evaluations took
+48.7 GPU-hours.
+
 \subsection{Evaluation protocol}
 Policies are evaluated in closed loop on the same CPU physics backend that
 generated the demonstrations. Each trained run is tested on 100 episodes with
