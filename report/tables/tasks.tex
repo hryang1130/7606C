@@ -1,0 +1,44 @@
+% Sources:
+% - control mode, horizon: dp-manip/configs/tasks/*.toml. LiftPegUpright was
+%   evaluated with 200 steps in the data-size study (member report task6) and
+%   400 in the backbone study (member report task6_backbone); its config
+%   default is 50.
+% - action dim: dp-manip/docs/results-summary.zh-CN.md section 1.
+% - cameras: maniskill-demogen/README.md (PickCube, PushCube, PullCube base
+%   camera only; StackCube base and wrist), dp-manip/docs/experiment-progress
+%   section 6 (PlaceSphere, one camera), member report task6_backbone and the
+%   ManiSkill source of LiftPegUpright (one base camera, 128 x 128).
+% - 400 / 50 demonstrations: the exporter keeps exactly the first 400 / 50
+%   usable demonstrations per split (maniskill-demogen/tasks.py) and fails if
+%   there are fewer.
+% - success rule: dp-manip/docs/final-plan.md section 1 for the original
+%   tasks; PlaceSphere and LiftPegUpright from the ManiSkill task documentation
+%   and source (read 2026-10-12 and 2026-10-13); confirm that version 3.0.1
+%   uses the same conditions.
+\begin{table}[htbp]
+  \centering
+  \caption{Task coverage (ManiSkill \texttt{-v1} environments). Control gives
+  the mode with the action dimension in parentheses: EE $\Delta$pos is
+  \texttt{pd\_ee\_delta\_pos} and joint pos is \texttt{pd\_joint\_pos}.
+  Horizon is the evaluation episode limit in steps. Every task has 400
+  training and 50 validation demonstrations.}
+  \label{tab:tasks}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\linewidth}{@{}llccc>{\raggedright\arraybackslash}X@{}}
+    \toprule
+    Task & Skill & Control & Cameras & Horizon & Success rule \\
+    \midrule
+    PickCube & Grasp, lift & EE $\Delta$pos (4) & 1 & 100 & Cube within 2.5 cm of goal, robot static \\
+    StackCube & Grasp, stack & EE $\Delta$pos (4) & 2 & 200 & Cube A on cube B, released, static \\
+    PushCube & Push & EE $\Delta$pos (4) & 1 & 100 & Cube inside goal region \\
+    PullCube & Pull & EE $\Delta$pos (4) & 1 & 100 & Cube inside goal region \\
+    PlaceSphere & Grasp, place & EE $\Delta$pos (4) & 1 & 200 & Sphere on the bin, robot static, gripper open \\
+    LiftPegUpright & Reorient & Joint pos (8) & 1 & 200, 400$^{a}$ & Peg upright within 0.08 rad, resting on the table \\
+    \bottomrule
+  \end{tabularx}
+
+  \vspace{2pt}
+  \parbox{\linewidth}{\footnotesize
+  $^{a}$ 200 steps in the data-size study and 400 in the backbone study.}
+\end{table}

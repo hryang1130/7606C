@@ -1,0 +1,85 @@
+% Suggested final budget: 1.0 page, including the task table.
+\section{Tasks and Expert Demonstrations}
+\label{sec:data}
+\subsection{Task coverage}
+% Sources: dp-manip/docs/final-plan.md section 1 (planned tasks and the
+% pre-registered LiftPegUpright fallback), dp-manip/docs/experiment-progress.zh-CN.md
+% section 5.1 (PlaceSphere rationale), maniskill-demogen/README.md (versions,
+% observation layout).
+We use six ManiSkill~3.0.1 tabletop tasks for the Panda arm (\cref{tab:tasks})
+that cover
+prehensile and non-prehensile manipulation: lifting, stacking, pushing,
+pulling, placing into a bin, and reorienting a peg. PushCube and PullCube
+both move a cube without grasping it but need opposite contact strategies:
+pushing from the near side versus reaching behind the cube and dragging it
+back. Policies see
+$128\times128$ RGB images and the low-dimensional state that ManiSkill
+exposes in RGB observation mode (robot state and task extras such as the goal
+position); object poses are never given to the policy. Every task uses one
+fixed camera, and StackCube adds a wrist camera. Actions have 4 dimensions
+under end-effector delta-position control (a Cartesian displacement and a
+gripper command) and 8 under joint-position control (seven joint targets and
+the gripper); \cref{tab:tasks} lists the mode of each task.
+
+\textbf{Changes from the proposal.} The proposal listed PegInsertionSide and
+PlugCharger as its two precision tasks. We could not establish a reliable
+baseline on either, so both were replaced and neither appears in the results
+below. LiftPegUpright, the fallback named in the proposal, replaces
+PlugCharger. PlaceSphere replaces PegInsertionSide; it was chosen because the
+failure-correction study needs a baseline with both successful and failed
+rollouts.
+\input{tables/tasks}
+
+\subsection{Demonstration generation and quality}
+% Drafted 2026-10-12. Sources: maniskill-demogen/README.md, docs/pipeline.md,
+% tasks.py and scripts/run_cpu.py (pipeline, checks, control modes);
+% dp-manip/docs/experiment-progress.zh-CN.md section 6 and
+% docs/task-owner-runbook.zh-CN.md section 2 (PlaceSphere yield); the
+% LiftPegUpright member report task6_backbone, section 2.1 (its cameras and
+% episode lengths); maniskill-demogen/tasks.py (440 / 55 default counts).
+We generated every demonstration ourselves with the motion-planning solvers
+that ManiSkill provides for the Panda arm; no dataset was downloaded. The
+solver is run on consecutive environment seeds and only successful episodes
+are kept. Each is then replayed twice in the policy's control mode on the same
+CPU physics backend, once recording $128\times128$ RGB observations and once
+recording state. The exporter accepts an episode only if both replays succeed
+and agree step by step, drops episodes that contain a joint jump above
+0.2~rad, and recomputes the first frame from a fresh reset, because
+ManiSkill~3.0.1 records stale contact observations there. It writes the first
+400 training and 50 validation episodes in seed order and fails if fewer are
+usable.
+
+The solver acts in joint-position control. The cube tasks and PlaceSphere are
+converted to end-effector delta-position control. LiftPegUpright needs
+end-effector rotation; in pilots on rotation tasks, conversion to delta-pose
+control kept only 60--73\% of the trajectories, below the 90\% threshold we
+had set, so it keeps joint-position control.
+
+By default the generator produces 440 training and 55 validation expert
+trajectories per task and exports the first 400 and 50 that pass the checks.
+PlaceSphere was the exception: only 68\% of its expert trajectories passed
+(298 of 440), so we regenerated it from 700. Episode length differs widely between tasks:
+PlaceSphere demonstrations take 90--150 steps (median 113), while those of
+LiftPegUpright take 153--702 (median 169).
+
+\subsection{Data separation}
+\label{sec:separation}
+% Drafted 2026-10-12. Sources: maniskill-demogen/tasks.py and docs/pipeline.md
+% (demonstration seed ranges, export assertions), dp-manip/configs/baseline.toml
+% [eval] (validation and test seeds), dp-manip/STATUS.md phase 4 (nested
+% subsets, duplicate check, recorded demo seeds), dp-manip/dp_manip/data.py
+% (normalization), configs/failure_aware/takeover_*.toml (takeover seeds).
+Environment seeds define four disjoint roles. Training demonstrations come
+from seeds 0--3999 and validation demonstrations from 4000--4999; validation
+rollouts use seeds from 5000, and the held-out test episodes use
+10000--10099. Test seeds are never used for training, for the validation
+loss, or to choose a checkpoint, since we always report the final one. The
+takeover-correction study uses further ranges that overlap none of these:
+40000--40949 for its probes, 41000--41599 to collect corrections, and
+43000--43199 for its evaluation.
+
+A data-size subset is the first $N$ training demonstrations in seed order.
+Subsets are therefore nested and identical across training seeds, and the
+action and state normalization statistics are computed from the selected $N$
+demonstrations only. The exporter asserts the seed ranges, and the training
+code rejects duplicate episodes and records the selected seeds with every run.

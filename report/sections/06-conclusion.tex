@@ -1,0 +1,16 @@
+% Suggested final budget: 0.2 page.
+\section{Conclusion}
+\label{sec:conclusion}
+Under one shared configuration, the number of demonstrations an RGB Diffusion
+Policy needs for 50\% success ranged from fewer than 25 to about 300 across
+six ManiSkill tasks, with learning curves of similar shape shifted along the
+data axis (RQ1). The denoising backbone mattered as much as the data on one
+task, where a Transformer with 100 demonstrations (90.6\%) beat the UNet with
+400 (53.4\%), but no backbone was best on all five tasks compared (RQ2). Where
+the policy failed in a recognizable way, 100 expert corrections at its own
+missed grasps raised success by 13.8 points while the same amount of ordinary
+demonstrations gave nothing, and they taught recovery where more
+demonstrations taught fewer misses (RQ3). These findings come from simulation,
+motion-planned demonstrations, and few seeds. The natural next experiment is
+the backbone comparison on PlaceSphere, to separate task difficulty from
+episode length in the MLP's deficit.
