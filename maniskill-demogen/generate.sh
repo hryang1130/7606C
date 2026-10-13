@@ -3,7 +3,7 @@
 #
 #   ./generate.sh <task> [generate_task.py options]
 #
-#   tasks: pickcube stackcube pushcube pullcube peginsertionside plugcharger
+#   tasks: pickcube stackcube pushcube pullcube peginsertionside plugcharger placesphere liftpegupright
 #
 #   ./generate.sh pickcube                           # everything, plan defaults, into ./data
 #   ./generate.sh plugcharger --out /scratch/$USER/demos
@@ -16,10 +16,10 @@ set -uo pipefail
 cd "$(dirname "$0")"
 unset UV_PROJECT_ENVIRONMENT
 PY=${PY:-.venv/bin/python}
-TASKS="pickcube stackcube pushcube pullcube peginsertionside plugcharger"
+TASKS="pickcube stackcube pushcube pullcube peginsertionside plugcharger placesphere liftpegupright"
 
 task=${1:-}
-if [ -z "$task" ] || [[ " $TASKS liftpegupright " != *" $task "* ]]; then
+if [ -z "$task" ] || [[ " $TASKS " != *" $task "* ]]; then
   echo "usage: $0 <task> [generate_task.py options]   (tasks: $TASKS)" >&2
   exit 2
 fi

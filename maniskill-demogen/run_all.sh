@@ -3,7 +3,7 @@
 # the number of jobs per user). Each task is a separate generate_task.py process with its
 # own log, <out>/logs/<task>.out; rerunning continues where a task stopped (.done markers).
 #
-#   ./run_all.sh                                   # all six tasks, JOBS = CPUs of this allocation
+#   ./run_all.sh                                   # all tasks, JOBS = CPUs of this allocation
 #   JOBS=3 ./run_all.sh pickcube stackcube         # some tasks
 #   OUT=/scratch/$USER/demos ./run_all.sh          # output root (generate_task.py --out)
 #   ARGS="--stages expert" ./run_all.sh            # extra generate_task.py arguments
@@ -16,7 +16,7 @@ unset UV_PROJECT_ENVIRONMENT
 export PY=${PY:-.venv/bin/python} OUT=${OUT:-data} ARGS=${ARGS:-}
 JOBS=${JOBS:-${SLURM_CPUS_ON_NODE:-$(nproc)}}
 tasks=("$@")
-[ ${#tasks[@]} -gt 0 ] || tasks=(pickcube stackcube pushcube pullcube peginsertionside plugcharger)
+[ ${#tasks[@]} -gt 0 ] || tasks=(pickcube stackcube pushcube pullcube peginsertionside plugcharger placesphere liftpegupright)
 mkdir -p "$OUT/logs"
 echo "=== run_all $(date "+%F %T"): ${tasks[*]}; $JOBS at a time; out $OUT; logs $OUT/logs/<task>.out"
 

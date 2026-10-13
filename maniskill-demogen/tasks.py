@@ -1,7 +1,7 @@
-"""The six tasks of dp-manip docs/final-plan.md §1 and their generation defaults.
+"""ManiSkill tasks and their generation defaults.
 
 The 4-dim tasks use pd_ee_delta_pos. The 7-dim tasks (PegInsertionSide, PlugCharger and
-the LiftPegUpright fallback) use pd_joint_pos, decided 9.25: converting them to
+LiftPegUpright) use pd_joint_pos, decided 9.25: converting them to
 pd_ee_delta_pose kept only 60-73% of the demos (dp-manip docs/0925-smoke.md §五), below
 final-plan §2.3's 90% gate. pd_joint_pos is the expert's own control mode, so the
 "conversion" replays the actions unchanged. Its actions are absolute joint targets in
@@ -32,7 +32,8 @@ TASKS = {
     "pullcube": Task("PullCube-v1", "pd_ee_delta_pos", 440, 55),
     "peginsertionside": Task("PegInsertionSide-v1", "pd_joint_pos", 440, 55),
     "plugcharger": Task("PlugCharger-v1", "pd_joint_pos", 600, 80),
-    "liftpegupright": Task("LiftPegUpright-v1", "pd_joint_pos", 440, 55),  # fallback for PlugCharger
+    "placesphere": Task("PlaceSphere-v1", "pd_ee_delta_pos", 440, 55),
+    "liftpegupright": Task("LiftPegUpright-v1", "pd_joint_pos", 440, 55),
 }
 
 # docs/final-plan.md §2.2: training pool (seeds 0-3999, first 400 usable) and validation

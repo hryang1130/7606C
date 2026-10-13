@@ -2,7 +2,18 @@
 
 为 DASC7606C Track 3 生成 ManiSkill 3 示范数据（RGB + state），**每人负责一个任务，一条命令生成这个任务的全部数据**。流程：运动规划专家 → 回放并录下观测（rgb、state 各一次；回放未成功的丢弃）→ 修正第 0 帧 → 导出成与 ManiSkill 官方示范相同的格式（训练 400 条、验证 50 条）。
 
-任务：`pickcube`、`stackcube`、`pushcube`、`pullcube`、`peginsertionside`、`plugcharger`。
+任务：`pickcube`、`stackcube`、`pushcube`、`pullcube`、`peginsertionside`、`plugcharger`、`placesphere`、`liftpegupright`。
+
+新增 `placesphere`（PlaceSphere-v1）沿用官方运动规划专家，导出控制模式为
+`pd_ee_delta_pos`，原始示范 440 + 55 条、导出训练/验证 400 + 50 条，种子段与其他任务相同。
+运行 `./generate.sh placesphere` 或 `sbatch --export=ALL,TASK=placesphere slurm/generate_task.sbatch`。
+该任务尚未进行真实仿真及控制模式转换成功率验证。
+
+`liftpegupright`（LiftPegUpright-v1）由备用任务提升为正式任务，保留官方专家及
+`pd_joint_pos`（8 维）配置，原始示范 440 + 55 条、导出训练/验证 400 + 50 条。
+运行 `./generate.sh liftpegupright` 或
+`sbatch --export=ALL,TASK=liftpegupright slurm/generate_task.sbatch`。
+此次接入尚未进行真实生成验证；已有任务的参数与种子段保持不变。
 
 ## 快速开始（在集群上，每人一个任务）
 
@@ -94,7 +105,7 @@ preview (first and last frames): data/dataset/train/PlugCharger-v1/motionplannin
 一个人要跑多个任务、而作业数量有限时，`run_all.sh` 在一次分配里并行跑（同时跑的个数 = CPU 数）：
 
 ```bash
-sbatch slurm/run_all.sbatch                                  # 一个作业，4 CPU + 1 GPU，六个任务
+sbatch slurm/run_all.sbatch                                  # 一个作业，4 CPU + 1 GPU，八个任务
 JOBS=2 ./run_all.sh pickcube stackcube                       # 在已有分配里跑其中几个
 ```
 
@@ -106,7 +117,7 @@ JOBS=2 ./run_all.sh pickcube stackcube                       # 在已有分配�
 | `--control-mode MODE` | 覆盖 `tasks.py` 里的控制模式 |
 | `--n-train / --n-val` | 生成的原始专家条数（默认见 `tasks.py`，PlugCharger 多生成） |
 | `--export-train 400 --export-val 50` | 导出前 N 条可用示范（final-plan §2.2） |
-| `--out` | 输出根目录，默认 `./data`；六个任务可以共用同一个 |
+| `--out` | 输出根目录，默认 `./data`；八个任务可以共用同一个 |
 
 ## 控制模式与条数（`tasks.py`）
 
