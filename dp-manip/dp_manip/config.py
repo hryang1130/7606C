@@ -5,7 +5,10 @@ from __future__ import annotations
 import copy
 import dataclasses
 import json
-import tomllib
+try:
+    import tomllib                    # Python 3.11+
+except ModuleNotFoundError:           # Python 3.10：tomli 是官方 backport
+    import tomli as tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TypeVar
